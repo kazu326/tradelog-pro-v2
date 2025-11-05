@@ -382,11 +382,15 @@ function showMainApp() {
  */
 function switchTab(tabName) {
   try {
+    console.log(`🔄 タブ切替開始: ${tabName}`);
     currentTab = tabName;
     
+    // 全タブボタンから active を削除
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.remove('active');
     });
+    
+    // 全タブペインから active を削除
     document.querySelectorAll('.tab-pane').forEach(pane => {
       pane.classList.remove('active');
     });
@@ -394,20 +398,29 @@ function switchTab(tabName) {
     const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
     const tabPane = document.getElementById(`tab-${tabName}`);
     
+    console.log('タブボタン:', tabButton);
+    console.log('タブペイン:', tabPane);
+    
     if (!tabButton || !tabPane) {
-      console.error(`タブが見つかりません: ${tabName}`);
+      console.error(`❌ タブが見つかりません: ${tabName}`);
+      console.error('利用可能なタブボタン:', Array.from(document.querySelectorAll('.tab-btn')).map(b => b.dataset.tab));
+      console.error('利用可能なタブペイン:', Array.from(document.querySelectorAll('.tab-pane')).map(p => p.id));
       return;
     }
     
     tabButton.classList.add('active');
     tabPane.classList.add('active');
+    
+    console.log(`✅ タブがアクティブになりました: ${tabName}`);
+    console.log('タブペインの表示スタイル:', window.getComputedStyle(tabPane).display);
 
     // タブの内容を読み込み
     loadTabContent(tabName).catch(error => {
-      console.error(`タブコンテンツ読み込みエラー (${tabName}):`, error);
+      console.error(`❌ タブコンテンツ読み込みエラー (${tabName}):`, error);
     });
   } catch (error) {
-    console.error('タブ切替エラー:', error);
+    console.error('❌ タブ切替エラー:', error);
+    console.error('エラー詳細:', error.stack);
   }
 }
 
@@ -416,22 +429,32 @@ function switchTab(tabName) {
  */
 async function loadTabContent(tabName) {
   try {
+    console.log(`📂 タブコンテンツ読み込み開始: ${tabName}`);
     const container = document.getElementById(`tab-${tabName}`);
     
     if (!container) {
-      console.error(`タブコンテナが見つかりません: tab-${tabName}`);
+      console.error(`❌ タブコンテナが見つかりません: tab-${tabName}`);
       return;
     }
     
+    console.log(`✅ コンテナが見つかりました:`, container);
+    console.log(`コンテナの内容（最初の200文字）:`, container.innerHTML.substring(0, 200));
+    
     if (tabName === 'record') {
+      console.log('📝 記録タブを初期化中...');
       await initTradeRecord(container);
     } else if (tabName === 'ai-analysis') {
+      console.log('🤖 AI分析タブを初期化中...');
       await initAIAnalysis(container);
     } else if (tabName === 'settings') {
+      console.log('⚙️ 設定タブを初期化中...');
       initLotCalculator(container);
     }
+    
+    console.log(`✅ タブコンテンツ読み込み完了: ${tabName}`);
   } catch (error) {
-    console.error(`タブコンテンツ読み込みエラー (${tabName}):`, error);
+    console.error(`❌ タブコンテンツ読み込みエラー (${tabName}):`, error);
+    console.error('エラー詳細:', error.stack);
     // エラーが発生した場合でも、ユーザーには表示を継続
   }
 }

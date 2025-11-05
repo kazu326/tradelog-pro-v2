@@ -9,11 +9,54 @@ import { showToast } from '../ui/toast.js';
  * AI分析アシスタント初期化
  */
 export async function initAIAnalysis(container) {
-  // HTMLは app.html に移動したので、イベントリスナーのみ設定
+  console.log('🤖 initAIAnalysis 開始');
+  console.log('コンテナ:', container);
+  
+  if (!container) {
+    console.error('❌ AI分析: コンテナが見つかりません');
+    return;
+  }
+  
+  console.log('コンテナのクラス:', container.className);
+  console.log('コンテナのスタイル:', window.getComputedStyle(container).display);
+  console.log('コンテナのHTML長:', container.innerHTML.length);
+  
+  // HTMLは app.js の showMainApp() で生成されているので、イベントリスナーのみ設定
   const buttons = container.querySelectorAll('[data-provider]');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => handleAIAnalysis(btn.dataset.provider));
-  });
+  
+  console.log(`🔍 ボタン検索結果: ${buttons.length}個見つかりました`);
+  
+  if (buttons.length === 0) {
+    console.warn('⚠️ AI分析: ボタンが見つかりません');
+    console.warn('コンテナの内容（最初の500文字）:', container.innerHTML.substring(0, 500));
+    console.warn('コンテナ内の全要素:', container.querySelectorAll('*').length);
+    return;
+  }
+  
+  console.log(`✅ AI分析: ${buttons.length}個のボタンにイベントリスナーを設定`);
+  
+  // イベント委譲を使用して、コンテナレベルでイベントを処理（重複防止）
+  // 既存のイベントリスナーを削除
+  const existingHandler = container._aiAnalysisHandler;
+  if (existingHandler) {
+    console.log('既存のイベントハンドラーを削除');
+    container.removeEventListener('click', existingHandler);
+  }
+  
+  // 新しいイベントハンドラーを作成
+  const clickHandler = (e) => {
+    const button = e.target.closest('[data-provider]');
+    if (button && container.contains(button)) {
+      e.preventDefault();
+      console.log('AI分析ボタンがクリックされました:', button.dataset.provider);
+      handleAIAnalysis(button.dataset.provider);
+    }
+  };
+  
+  container.addEventListener('click', clickHandler);
+  container._aiAnalysisHandler = clickHandler; // 後で削除できるように保存
+  
+  console.log('✅ initAIAnalysis 完了');
 }
 
 /**
