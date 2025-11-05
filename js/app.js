@@ -49,39 +49,56 @@ async function handleAuthCallback() {
  * アプリ起動
  */
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('🚀 TradeLog Pro starting...');
-  
-  // マジックリンクのトークンチェック（最優先）
-  await handleAuthCallback();
-  
-  // 認証状態監視
-  onAuthStateChange(handleAuthChange);
-  
-  // 初回ロード時の認証チェック
-  await checkAuth();
+  try {
+    console.log('🚀 TradeLog Pro starting...');
+    
+    // マジックリンクのトークンチェック（最優先）
+    await handleAuthCallback();
+    
+    // 認証状態監視
+    onAuthStateChange(handleAuthChange);
+    
+    // 初回ロード時の認証チェック
+    await checkAuth();
+  } catch (error) {
+    console.error('❌ アプリ起動エラー:', error);
+    document.body.innerHTML = `
+      <div style="padding: 20px; text-align: center;">
+        <h1>エラーが発生しました</h1>
+        <p>${error.message || '不明なエラー'}</p>
+        <button onclick="location.reload()">ページをリロード</button>
+      </div>
+    `;
+  }
 });
 
 /**
  * 認証状態チェック
  */
 async function checkAuth() {
-  const user = await getCurrentUser();
-  
-  if (!user) {
-    showLoginScreen();
-    return;
-  }
-  
-  currentUser = user;
-  userProfile = await getUserProfile(user.id);
-  
-  // プロフィールがない場合は作成
-  if (!userProfile) {
-    await createUserProfile(user.id, user.email);
+  try {
+    const user = await getCurrentUser();
+    
+    if (!user) {
+      showLoginScreen();
+      return;
+    }
+    
+    currentUser = user;
     userProfile = await getUserProfile(user.id);
+    
+    // プロフィールがない場合は作成
+    if (!userProfile) {
+      await createUserProfile(user.id, user.email);
+      userProfile = await getUserProfile(user.id);
+    }
+    
+    showMainApp();
+  } catch (error) {
+    console.error('❌ 認証チェックエラー:', error);
+    // エラーが発生した場合はログイン画面を表示
+    showLoginScreen();
   }
-  
-  showMainApp();
 }
 
 /**
@@ -91,7 +108,10 @@ function handleAuthChange(event, session) {
   console.log('Auth state changed:', event);
   
   if (event === 'SIGNED_IN') {
-    checkAuth();
+    // 非同期関数を呼び出す際はエラーハンドリングを追加
+    checkAuth().catch(error => {
+      console.error('❌ 認証状態変化時のエラー:', error);
+    });
   } else if (event === 'SIGNED_OUT') {
     showLoginScreen();
   }
@@ -352,46 +372,67 @@ function showMainApp() {
   });
 
   // 初期タブの内容を読み込み
-  loadTabContent('record');
+  loadTabContent('record').catch(error => {
+    console.error('初期タブ読み込みエラー:', error);
+  });
 }
 
 /**
  * タブ切替
  */
 function switchTab(tabName) {
-  currentTab = tabName;
-  
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.remove('active');
-  });
-  document.querySelectorAll('.tab-pane').forEach(pane => {
-    pane.classList.remove('active');
-  });
-  
-  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-  document.getElementById(`tab-${tabName}`).classList.add('active');
+  try {
+    currentTab = tabName;
+    
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+      pane.classList.remove('active');
+    });
+    
+    const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+    const tabPane = document.getElementById(`tab-${tabName}`);
+    
+    if (!tabButton || !tabPane) {
+      console.error(`タブが見つかりません: ${tabName}`);
+      return;
+    }
+    
+    tabButton.classList.add('active');
+    tabPane.classList.add('active');
 
-  // タブの内容を読み込み
-  loadTabContent(tabName);
+    // タブの内容を読み込み
+    loadTabContent(tabName).catch(error => {
+      console.error(`タブコンテンツ読み込みエラー (${tabName}):`, error);
+    });
+  } catch (error) {
+    console.error('タブ切替エラー:', error);
+  }
 }
 
 /**
  * タブの内容を読み込み
  */
 async function loadTabContent(tabName) {
-  const container = document.getElementById(`tab-${tabName}`);
-  
-  if (!container) {
-    console.error(`タブコンテナが見つかりません: tab-${tabName}`);
-    return;
-  }
-  
-  if (tabName === 'record') {
-    await initTradeRecord(container);
-  } else if (tabName === 'ai-analysis') {
-    await initAIAnalysis(container);
-  } else if (tabName === 'settings') {
-    initLotCalculator(container);
+  try {
+    const container = document.getElementById(`tab-${tabName}`);
+    
+    if (!container) {
+      console.error(`タブコンテナが見つかりません: tab-${tabName}`);
+      return;
+    }
+    
+    if (tabName === 'record') {
+      await initTradeRecord(container);
+    } else if (tabName === 'ai-analysis') {
+      await initAIAnalysis(container);
+    } else if (tabName === 'settings') {
+      initLotCalculator(container);
+    }
+  } catch (error) {
+    console.error(`タブコンテンツ読み込みエラー (${tabName}):`, error);
+    // エラーが発生した場合でも、ユーザーには表示を継続
   }
 }
 
