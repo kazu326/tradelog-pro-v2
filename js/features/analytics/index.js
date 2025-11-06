@@ -5,6 +5,7 @@
 import { getTrades } from '../../core/storage.js';
 import { calculateStats, calculateDrawdown } from '../../core/analytics.js';
 import { renderCumulativePnlChart } from './charts.js';
+import { openImportWizard } from '../../importer/wizard.js';
 import { showToast } from '../../ui/toast.js';
 
 // 初期化済みセクションを追跡
@@ -102,6 +103,9 @@ function buildAnalyticsUI(stats, drawdown, trades) {
         <!-- 概要タブ -->
         <div id="analytics-overview" class="analytics-tab-pane ${savedTab === 'overview' ? 'active' : ''}">
           ${buildOverviewTab(stats, drawdown)}
+          <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+            <button id="open-import-wizard" class="btn-primary">データをインポート</button>
+          </div>
         </div>
         
         <!-- 詳細タブ -->
@@ -355,6 +359,11 @@ function switchTab(tab) {
         initGraphsLazy();
       });
       sel._bound = true;
+    }
+    const impBtn = document.getElementById('open-import-wizard');
+    if (impBtn && !impBtn._bound) {
+      impBtn.addEventListener('click', () => openImportWizard());
+      impBtn._bound = true;
     }
   }
 }

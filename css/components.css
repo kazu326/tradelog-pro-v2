@@ -43,6 +43,62 @@
   width: 100%;
 }
 
+/* モーダル/インポートUI 共通 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 9998;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(720px, 94vw);
+  max-height: 90vh;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+}
+
+.modal__header,
+.modal__footer {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+.modal__footer { border-top: 1px solid var(--color-border); border-bottom: none; }
+
+.modal__body {
+  padding: var(--space-lg);
+  overflow: auto;
+}
+
+.modal__close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+}
+
+.import-source,
+.import-controls {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.progress-bar { height: 8px; background: rgba(0,0,0,0.06); border-radius: 6px; overflow: hidden; }
+.progress-bar > div { height: 100%; width: 0; background: var(--color-primary); transition: width .2s ease; }
+
+.import-preview table td, .import-preview table th { padding: 6px 8px; }
+
 .help-text {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
