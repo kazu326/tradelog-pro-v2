@@ -5,7 +5,6 @@
 import { getTrades } from '../../core/storage.js';
 import { calculateStats, calculateDrawdown } from '../../core/analytics.js';
 import { renderCumulativePnlChart } from './charts.js';
-import { openImportWizard } from '../../importer/wizard.js';
 import { showToast } from '../../ui/toast.js';
 
 // 初期化済みセクションを追跡
@@ -369,9 +368,11 @@ function switchTab(tab) {
 function bindImportButton() {
   const impBtn = document.getElementById('open-import-wizard');
   if (impBtn && !impBtn._bound) {
-    const handler = (e) => {
+    const handler = async (e) => {
       e.preventDefault();
-      openImportWizard();
+      // 必要時にだけ動的インポート（初期ロードの依存関係エラーを回避）
+      const mod = await import('../../importer/wizard.js');
+      mod.openImportWizard();
     };
     impBtn.addEventListener('click', handler, { passive: false });
     // タッチ環境での反応性向上
