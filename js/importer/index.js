@@ -78,23 +78,32 @@ async function loadXLSX() {
 /**
  * 共通インポート実行
  * @param {Array<Object>} rawRows
- * @returns {Promise<{okCount:number, ngCount:number, samples:any[]}>}
+ * @returns {Promise<{okCount:number, ngCount:number, samples:any[], errors:Array<{index:number, error:string, data:any}>}>}
  */
 export async function importTrades(rawRows) {
   let okCount = 0, ngCount = 0;
   const samples = [];
-  for (const raw of rawRows) {
+  const errors = [];
+  for (let i = 0; i < rawRows.length; i++) {
+    const raw = rawRows[i];
     const r = validateAndNormalizeTrade(raw);
-    if (!r.ok) { ngCount++; continue; }
+    if (!r.ok) {
+      ngCount++;
+      errors.push({ index: i + 1, error: r.error, data: raw });
+      continue;
+    }
     if (samples.length < 5) samples.push(r.value);
     try {
       await saveTrade(r.value);
       okCount++;
     } catch (e) {
       ngCount++;
+      const errorMsg = e?.message || e?.error?.message || String(e);
+      errors.push({ index: i + 1, error: errorMsg, data: raw });
+      console.error(`インポートエラー (行 ${i + 1}):`, e);
     }
   }
-  return { okCount, ngCount, samples };
+  return { okCount, ngCount, samples, errors };
 }
 
 

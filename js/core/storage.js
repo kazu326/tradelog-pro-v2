@@ -10,12 +10,20 @@ export async function saveTrade(tradeData) {
   const user = await getCurrentUser();
   if (!user) throw new Error('ログインが必要です');
 
+  // idがundefined/nullの場合は除外（Supabaseが自動生成するため）
+  const { id, ...dataToInsert } = tradeData;
+  const payload = {
+    user_id: user.id,
+    ...dataToInsert
+  };
+  // idが有効な値の場合のみ含める（更新時など）
+  if (id && id !== null && id !== undefined) {
+    payload.id = id;
+  }
+
   const { data, error } = await supabaseClient
     .from('trades')
-    .insert([{
-      user_id: user.id,
-      ...tradeData
-    }])
+    .insert([payload])
     .select()
     .single();
 

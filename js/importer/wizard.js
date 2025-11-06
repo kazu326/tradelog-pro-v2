@@ -126,35 +126,51 @@ export function openImportWizard() {
         return;
       }
 
-      const { okCount, ngCount, samples } = await Importer.importTrades(rows);
+      const { okCount, ngCount, samples, errors } = await Importer.importTrades(rows);
       bar.style.width = '90%';
 
-      renderPreview(wrap.querySelector('#imp-preview'), samples, okCount, ngCount);
+      renderPreview(wrap.querySelector('#imp-preview'), samples, okCount, ngCount, errors);
       bar.style.width = '100%';
       setTimeout(()=>{ progress.style.display='none'; }, 400);
-      showToast(`インポート完了: 成功 ${okCount} / 失敗 ${ngCount}`, 'success');
-
-      // インポート→分析体験へ自動遷移
-      try {
-        // 1) 分析ページの内部タブをグラフにする指定を保存
-        localStorage.setItem('analytics:tab', 'graphs');
-        // 2) ウィザードを閉じる
-        wrap.remove();
-        // 3) メインタブの「分析」へ切替（loadTabContentで再初期化）
-        const analyticsTabBtn = document.querySelector('.tab-btn[data-tab="analytics"]');
-        if (analyticsTabBtn) {
-          analyticsTabBtn.click();
-        }
-      } catch {}
+      
+      // 結果を表示
+      if (ngCount > 0) {
+        showToast(`インポート完了: 成功 ${okCount} / 失敗 ${ngCount}。詳細はプレビューを確認してください。`, 'warning');
+      } else {
+        showToast(`インポート完了: ${okCount} 件を正常にインポートしました！`, 'success');
+        // 成功時のみ自動遷移
+        try {
+          localStorage.setItem('analytics:tab', 'graphs');
+          wrap.remove();
+          const analyticsTabBtn = document.querySelector('.tab-btn[data-tab="analytics"]');
+          if (analyticsTabBtn) {
+            analyticsTabBtn.click();
+          }
+        } catch {}
+      }
     } catch (e) {
       showToast('インポート中にエラーが発生しました', 'error');
     }
   });
 }
 
-function renderPreview(container, samples, ok, ng) {
+function renderPreview(container, samples, ok, ng, errors = []) {
   const head = ['created_at','pair','direction','entry_price','exit_price','lot_size','pips','pnl','notes'];
   const rows = samples.map(r => `<tr>${head.map(h=>`<td>${escapeHtml(r[h]??'')}</td>`).join('')}</tr>`).join('');
+  
+  let errorHtml = '';
+  if (errors.length > 0) {
+    errorHtml = `
+      <div style="margin-top:16px; padding:12px; background:var(--color-error-bg, #fee); border:1px solid var(--color-error, #f44); border-radius:8px;">
+        <strong style="color:var(--color-error, #f44);">エラー詳細:</strong>
+        <ul style="margin:8px 0 0 0; padding-left:20px; font-size:12px;">
+          ${errors.slice(0, 5).map(e => `<li>行 ${e.index}: ${escapeHtml(e.error)}</li>`).join('')}
+          ${errors.length > 5 ? `<li>...他 ${errors.length - 5} 件のエラー</li>` : ''}
+        </ul>
+      </div>
+    `;
+  }
+  
   container.innerHTML = `
     <div style="display:flex; gap:12px; align-items:center; margin:8px 0;">
       <strong>プレビュー</strong>
@@ -166,6 +182,7 @@ function renderPreview(container, samples, ok, ng) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${errorHtml}
   `;
 }
 

@@ -31,7 +31,6 @@ export function validateAndNormalizeTrade(raw) {
     const direction = String(raw.direction).toLowerCase();
     if (direction !== 'buy' && direction !== 'sell') return { ok:false, error:'direction は buy/sell' };
     const normalized = {
-      id: raw.id || undefined,
       created_at: new Date(raw.created_at).toISOString(),
       pair: String(raw.pair).toUpperCase().replace(/\s+/g,''),
       direction,
@@ -42,6 +41,10 @@ export function validateAndNormalizeTrade(raw) {
       pnl: Number(raw.pnl),
       notes: raw.notes ? String(raw.notes) : undefined
     };
+    // idが有効な値の場合のみ含める（更新時など）
+    if (raw.id && raw.id !== null && raw.id !== undefined && raw.id !== '') {
+      normalized.id = String(raw.id);
+    }
     if ([normalized.entry_price,normalized.exit_price,normalized.lot_size,normalized.pips,normalized.pnl].some(n=>Number.isNaN(n))) {
       return { ok:false, error:'数値項目に無効値があります' };
     }
