@@ -367,18 +367,38 @@ function switchTab(tab) {
 
 function bindImportButton() {
   const impBtn = document.getElementById('open-import-wizard');
-  if (impBtn && !impBtn._bound) {
-    const handler = async (e) => {
-      e.preventDefault();
+  if (!impBtn) return;
+  
+  // 既存のリスナーを削除（重複防止）
+  if (impBtn._bound) {
+    const oldBtn = impBtn.cloneNode(true);
+    impBtn.parentNode?.replaceChild(oldBtn, impBtn);
+    return bindImportButton(); // 再帰的に再バインド
+  }
+  
+  const handler = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      console.log('インポートウィザードを開きます...');
       // 必要時にだけ動的インポート（初期ロードの依存関係エラーを回避）
       const mod = await import('../../importer/wizard.js');
-      mod.openImportWizard();
-    };
-    impBtn.addEventListener('click', handler, { passive: false });
-    // タッチ環境での反応性向上
-    impBtn.addEventListener('touchend', handler, { passive: false });
-    impBtn._bound = true;
-  }
+      if (mod && typeof mod.openImportWizard === 'function') {
+        mod.openImportWizard();
+      } else {
+        console.error('openImportWizard が見つかりません', mod);
+        showToast('インポート機能の読み込みに失敗しました', 'error');
+      }
+    } catch (error) {
+      console.error('インポートウィザードの読み込みエラー:', error);
+      showToast('インポート機能の読み込みに失敗しました: ' + error.message, 'error');
+    }
+  };
+  
+  impBtn.addEventListener('click', handler, { passive: false });
+  // タッチ環境での反応性向上
+  impBtn.addEventListener('touchend', handler, { passive: false });
+  impBtn._bound = true;
 }
 
 function initGraphsLazy(tradesCache) {
