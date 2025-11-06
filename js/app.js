@@ -5,21 +5,19 @@ import { supabaseClient, getCurrentUser, getUserProfile, onAuthStateChange, sign
 import { initTradeRecord } from './features/trade-record.js';
 import { initLotCalculator } from './features/lot-calculator.js';
 import { initAIAnalysis } from './features/ai-analysis.js';
+import { showToast } from './ui/toast.js';
 
 // グローバル状態
 let currentUser = null;
 let userProfile = null;
 let currentTab = 'record';
 
-/**
- * マジックリンク認証のトークン処理
- */
+// マジックリンク認証のトークン処理
+
 async function handleAuthCallback() {
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const access_token = hashParams.get('access_token');
   const refresh_token = hashParams.get('refresh_token');
-
-  console.log('🔍 認証チェック:', { access_token: !!access_token });
 
   if (access_token) {
     try {
@@ -30,17 +28,20 @@ async function handleAuthCallback() {
 
       if (error) throw error;
 
-      console.log('✅ マジックリンクでログイン成功');
+      console.log('✅ ログイン成功');
       
-      // URLからトークンを削除（セキュリティ対策）
+      const authContainer = document.querySelector('.auth-container');
+      const appContainer = document.querySelector('.app-container');
+      
+      if (authContainer) authContainer.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'block';
+
+      showToast('ログインしました', 'success');
       window.history.replaceState({}, document.title, window.location.pathname);
-      
-      // 認証チェックを実行（メイン画面を表示）
-      await checkAuth();
 
     } catch (error) {
       console.error('❌ ログインエラー:', error);
-      alert('ログインに失敗しました: ' + error.message);
+      showToast('ログインに失敗しました', 'error');
     }
   }
 }
@@ -54,6 +55,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // マジックリンクのトークンチェック（最優先）
     await handleAuthCallback();
+    
+    // 既存セッションのチェック
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    
+    if (session) {
+      const authContainer = document.querySelector('.auth-container');
+      const appContainer = document.querySelector('.app-container');
+      
+      if (authContainer) authContainer.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'block';
+    }
     
     // 認証状態監視
     onAuthStateChange(handleAuthChange);
@@ -464,3 +476,4 @@ window.app = {
   currentUser: () => currentUser,
   userProfile: () => userProfile
 };
+

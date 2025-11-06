@@ -43,17 +43,67 @@ export async function initAIAnalysis(container) {
     container.removeEventListener('click', existingHandler);
   }
   
-  // 新しいイベントハンドラーを作成
+  // 新しいイベントハンドラーを作成（モバイル対応）
+  let isProcessing = false; // 重複実行防止
+  let touchHandled = false; // タッチイベント処理フラグ
+  
   const clickHandler = (e) => {
+    // モバイルでタッチイベントが既に処理された場合はスキップ
+    if (touchHandled) {
+      touchHandled = false; // フラグをリセット
+      return;
+    }
+    
     const button = e.target.closest('[data-provider]');
-    if (button && container.contains(button)) {
+    if (button && container.contains(button) && !isProcessing) {
       e.preventDefault();
-      console.log('AI分析ボタンがクリックされました:', button.dataset.provider);
-      handleAIAnalysis(button.dataset.provider);
+      e.stopPropagation(); // イベントの伝播を停止
+      
+      const provider = button.dataset.provider;
+      console.log('AI分析ボタンがクリックされました:', provider);
+      
+      isProcessing = true;
+      
+      // 非同期処理なので、完了後にフラグをリセット
+      handleAIAnalysis(provider)
+        .finally(() => {
+          // 少し遅延を入れてからフラグをリセット（連続クリック防止）
+          setTimeout(() => {
+            isProcessing = false;
+          }, 1000);
+        });
     }
   };
   
-  container.addEventListener('click', clickHandler);
+  container.addEventListener('touchstart', (e) => {
+    touchHandled = false;
+  }, { passive: true });
+  
+  container.addEventListener('touchend', (e) => {
+    // タッチイベントでも同じ処理を実行
+    const button = e.target.closest('[data-provider]');
+    if (button && container.contains(button) && !isProcessing && !touchHandled) {
+      touchHandled = true;
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const provider = button.dataset.provider;
+      console.log('AI分析ボタンがタッチされました:', provider);
+      
+      isProcessing = true;
+      
+      handleAIAnalysis(provider)
+        .finally(() => {
+          setTimeout(() => {
+            isProcessing = false;
+            touchHandled = false;
+          }, 1000);
+        });
+    }
+  }, { passive: false });
+  
+  container.addEventListener('click', clickHandler, { passive: false });
+  
   container._aiAnalysisHandler = clickHandler; // 後で削除できるように保存
   
   console.log('✅ initAIAnalysis 完了');
@@ -88,25 +138,78 @@ async function handleAIAnalysis(provider) {
       includeGoals
     });
     
-    // クリップボードにコピー
-    await copyToClipboard(prompt);
-    
-    // トーストを先に表示
-    showToast('プロンプトをコピーしました！AIチャットに貼り付けてください', 'success');
-    
-    // 0.5秒後に別タブ起動（トースト表示時間を確保）
-    setTimeout(() => {
-      const urls = {
-        chatgpt: 'https://chat.openai.com/',
-        claude: 'https://claude.ai/new',
-        gemini: 'https://gemini.google.com/'
-      };
+    // クリップボードにコピー（モバイル対応）
+    let copySuccess = false;
+    try {
+      await copyToClipboard(prompt);
+      copySuccess = true;
+      showToast('プロンプトをコピーしました！AIチャットに貼り付けてください', 'success');
+    } catch (copyError) {
+      console.error('コピーエラー:', copyError);
+      // モバイルでコピーに失敗した場合でも、プロンプトを表示して続行
+      copySuccess = false;
+      showToast('コピーできませんでした。プロンプトは下に表示されます', 'warning');
       
-      const url = urls[provider];
-      if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer');
+      // プロンプトを画面に表示（モバイル用フォールバック）
+      const promptDisplay = document.createElement('div');
+      promptDisplay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.9);
+        z-index: 10000;
+        padding: 20px;
+        overflow-y: auto;
+        color: white;
+      `;
+      promptDisplay.innerHTML = `
+        <div style="max-width: 600px; margin: 0 auto;">
+          <h2 style="color: white; margin-bottom: 20px;">生成されたプロンプト</h2>
+          <pre style="background: #1a1a1a; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; color: #e0e0e0;">${prompt}</pre>
+          <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">閉じる</button>
+        </div>
+      `;
+      document.body.appendChild(promptDisplay);
+    }
+    
+    // 別タブ起動（モバイル対応）
+    // モバイルではwindow.openがブロックされる可能性があるため、ユーザーアクション内で実行
+    const urls = {
+      chatgpt: 'https://chat.openai.com/',
+      claude: 'https://claude.ai/new',
+      gemini: 'https://gemini.google.com/'
+    };
+    
+    const url = urls[provider];
+    if (url) {
+      // モバイルでは即座に開く（ユーザーアクション内）
+      try {
+        const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+        // モバイルでポップアップブロックされた場合のフォールバック
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+          showToast('ポップアップがブロックされました。リンクを手動で開いてください', 'warning');
+          // リンクをクリック可能な要素として表示
+          const linkElement = document.createElement('a');
+          linkElement.href = url;
+          linkElement.target = '_blank';
+          linkElement.rel = 'noopener noreferrer';
+          linkElement.textContent = `${provider}を開く`;
+          linkElement.style.cssText = 'display: block; margin-top: 10px; padding: 10px; background: #007bff; color: white; text-align: center; text-decoration: none; border-radius: 5px;';
+          // 適切な場所に追加（例: トーストの近く）
+          setTimeout(() => {
+            const toast = document.querySelector('.toast');
+            if (toast && toast.parentElement) {
+              toast.parentElement.appendChild(linkElement);
+            }
+          }, 100);
+        }
+      } catch (openError) {
+        console.error('Window open error:', openError);
+        showToast(`${provider}を開けませんでした。手動で開いてください`, 'error');
       }
-    }, 1000);
+    }
     
   } catch (error) {
     console.error('Error in AI analysis:', error);
@@ -271,36 +374,67 @@ function calculateTimeStats(trades) {
 }
 
 /**
- * クリップボードにコピー
+ * クリップボードにコピー（モバイル対応）
  */
 async function copyToClipboard(text) {
   try {
-    // モダンブラウザのClipboard API
+    // モダンブラウザのClipboard API（モバイル対応）
     if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return;
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (clipboardError) {
+        console.warn('Clipboard API failed, trying fallback:', clipboardError);
+        // フォールバックに続く
+      }
     }
     
-    // フォールバック: execCommand
+    // フォールバック: execCommand（モバイル対応）
     const textArea = document.createElement('textarea');
     textArea.value = text;
+    // モバイルでの表示位置を調整
     textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
+    textArea.style.left = '0';
+    textArea.style.top = '0';
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = '0';
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    textArea.style.opacity = '0';
+    textArea.setAttribute('readonly', '');
+    textArea.setAttribute('aria-hidden', 'true');
+    
     document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
+    
+    // モバイル対応: iOS Safariでの選択
+    if (navigator.userAgent.match(/ipad|iphone/i)) {
+      const range = document.createRange();
+      range.selectNodeContents(textArea);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      textArea.setSelectionRange(0, 999999);
+    } else {
+      textArea.select();
+    }
     
     try {
-      document.execCommand('copy');
-      textArea.remove();
+      const successful = document.execCommand('copy');
+      if (!successful) {
+        throw new Error('execCommand failed');
+      }
     } catch (err) {
       console.error('Fallback copy failed:', err);
-      textArea.remove();
       throw new Error('クリップボードへのコピーに失敗しました');
+    } finally {
+      document.body.removeChild(textArea);
     }
   } catch (error) {
     console.error('Copy to clipboard failed:', error);
+    // モバイルではコピーに失敗してもエラーを表示せず、続行を許可
     throw error;
   }
 }
