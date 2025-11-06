@@ -4,15 +4,16 @@
 
 import { saveChartInstance, destroyChart } from './index.js';
 
-let ChartModule = null;
+let ChartCtor = null;
 
 async function getChartModule() {
-  if (!ChartModule) {
-    // Chart.js を動的読み込み
-    const mod = await import('https://cdn.jsdelivr.net/npm/chart.js');
-    ChartModule = mod;
+  if (!ChartCtor) {
+    // Chart.js (auto) のESM版を動的読み込み（ブラウザ向け）
+    const mod = await import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/auto');
+    // autoビルドは default エクスポート
+    ChartCtor = mod.default || mod.Chart || mod;
   }
-  return ChartModule;
+  return ChartCtor;
 }
 
 /**
@@ -23,7 +24,7 @@ export async function renderMonthlyCumulativePnlChart({
   trades,
   chartId
 }) {
-  const { Chart } = await getChartModule();
+  const Chart = await getChartModule();
 
   // 既存チャートを破棄
   destroyChart(chartId);
@@ -31,8 +32,10 @@ export async function renderMonthlyCumulativePnlChart({
   // 月別合計 → 累積へ変換
   const monthlyMap = new Map(); // key: YYYY-MM, value: sum pnl
   const sorted = [...trades].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const JST_OFFSET_MS = 9 * 60 * 60 * 1000; // UTC→JST (+9h)
   sorted.forEach(t => {
-    const d = new Date(t.created_at);
+    // SupabaseのUTCタイムスタンプをJSTに補正して月を算出
+    const d = new Date(new Date(t.created_at).getTime() + JST_OFFSET_MS);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     monthlyMap.set(key, (monthlyMap.get(key) || 0) + (t.pnl || 0));
   });
