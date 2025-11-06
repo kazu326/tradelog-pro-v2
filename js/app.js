@@ -5,6 +5,7 @@ import { supabaseClient, getCurrentUser, getUserProfile, onAuthStateChange, sign
 import { initTradeRecord } from './features/trade-record.js';
 import { initLotCalculator } from './features/lot-calculator.js';
 import { initAIAnalysis } from './features/ai-analysis.js';
+import { initAnalytics } from './features/analytics.js';
 import { showToast } from './ui/toast.js';
 
 // グローバル状態
@@ -234,10 +235,7 @@ function showMainApp() {
         
         <div class="tab-content">
           <div id="tab-record" class="tab-pane active"></div>
-          <div id="tab-analytics" class="tab-pane">
-            <h2>📊 分析</h2>
-            <p>統計グラフ・勝率表示は今後実装予定...</p>
-          </div>
+          <div id="tab-analytics" class="tab-pane"></div>
           <div id="tab-ai-analysis" class="tab-pane">
             <div class="ai-analysis-hero">
               <h2>🤖 AI分析アシスタント</h2>
@@ -455,6 +453,9 @@ async function loadTabContent(tabName) {
     if (tabName === 'record') {
       console.log('📝 記録タブを初期化中...');
       await initTradeRecord(container);
+    } else if (tabName === 'analytics') {
+      console.log('📊 分析タブを初期化中...');
+      await initAnalytics(container);
     } else if (tabName === 'ai-analysis') {
       console.log('🤖 AI分析タブを初期化中...');
       await initAIAnalysis(container);
