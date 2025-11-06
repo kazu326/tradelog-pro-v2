@@ -4,6 +4,7 @@
  */
 import { getTrades } from '../../core/storage.js';
 import { calculateStats, calculateDrawdown } from '../../core/analytics.js';
+import { renderMonthlyCumulativePnlChart } from './charts.js';
 import { showToast } from '../../ui/toast.js';
 
 // 初期化済みセクションを追跡
@@ -274,8 +275,11 @@ function buildDetailTab() {
 function buildGraphsTab() {
   return `
     <div class="graphs-section">
-      <div style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
-        <p>📈 月間損益グラフは今後実装予定です</p>
+      <h3 style="margin-bottom: 12px;">📈 月間損益（累積）</h3>
+      <div class="chart-card">
+        <div class="chart-container">
+          <canvas id="monthly-pnl-canvas" aria-label="月間損益グラフ" role="img"></canvas>
+        </div>
       </div>
     </div>
   `;
@@ -300,6 +304,8 @@ function setupTabs() {
 /**
  * タブを切替
  */
+let graphsInitialized = false;
+
 function switchTab(tab) {
   // ボタンの状態を更新
   document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
@@ -316,6 +322,20 @@ function switchTab(tab) {
   // グラフタブの場合はチャートを破棄
   if (tab !== 'graphs') {
     destroyAllCharts();
+  } else {
+    // 初回のみグラフ初期化（遅延ロード）
+    if (!graphsInitialized) {
+      // trades はグローバル閉包ではないため、DOMから再計算を避ける目的で
+      // window.app.currentUser 等とは別に、必要最小限のデータだけ再取得
+      getTrades(1000).then(trades => {
+        renderMonthlyCumulativePnlChart({
+          canvasId: 'monthly-pnl-canvas',
+          trades,
+          chartId: 'monthly-pnl'
+        });
+        graphsInitialized = true;
+      }).catch(() => {});
+    }
   }
 }
 
