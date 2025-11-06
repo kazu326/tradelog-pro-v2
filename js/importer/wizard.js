@@ -86,6 +86,19 @@ export function openImportWizard() {
       bar.style.width = '100%';
       setTimeout(()=>{ progress.style.display='none'; }, 400);
       showToast(`インポート完了: 成功 ${okCount} / 失敗 ${ngCount}`, 'success');
+
+      // インポート→分析体験へ自動遷移
+      try {
+        // 1) 分析ページの内部タブをグラフにする指定を保存
+        localStorage.setItem('analytics:tab', 'graphs');
+        // 2) ウィザードを閉じる
+        wrap.remove();
+        // 3) メインタブの「分析」へ切替（loadTabContentで再初期化）
+        const analyticsTabBtn = document.querySelector('.tab-btn[data-tab="analytics"]');
+        if (analyticsTabBtn) {
+          analyticsTabBtn.click();
+        }
+      } catch {}
     } catch (e) {
       showToast('インポート中にエラーが発生しました', 'error');
     }
