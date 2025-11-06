@@ -30,31 +30,48 @@ async function getChartModule() {
 /**
  * 月間損益（累積）ラインチャートを描画
  */
-export async function renderMonthlyCumulativePnlChart({
+export async function renderCumulativePnlChart({
   canvasId,
   trades,
-  chartId
+  chartId,
+  period = 'monthly' // 'daily' | 'weekly' | 'monthly' | 'yearly'
 }) {
   const Chart = await getChartModule();
 
   // 既存チャートを破棄
   destroyChart(chartId);
 
-  // 月別合計 → 累積へ変換
-  const monthlyMap = new Map(); // key: YYYY-MM, value: sum pnl
+  // 期間別合計 → 累積へ変換
+  const bucketMap = new Map(); // key: label, value: sum pnl
   const sorted = [...trades].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const JST_OFFSET_MS = 9 * 60 * 60 * 1000; // UTC→JST (+9h)
   sorted.forEach(t => {
-    // SupabaseのUTCタイムスタンプをJSTに補正して月を算出
+    // SupabaseのUTCタイムスタンプをJSTに補正して期間キーを算出
     const d = new Date(new Date(t.created_at).getTime() + JST_OFFSET_MS);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    monthlyMap.set(key, (monthlyMap.get(key) || 0) + (t.pnl || 0));
+    let key = '';
+    if (period === 'daily') {
+      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } else if (period === 'weekly') {
+      // 月曜起点の簡易週キー（YYYY-Wnn）
+      const day = (d.getDay() + 6) % 7; // Mon=0
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - day);
+      const year = monday.getFullYear();
+      const startOfYear = new Date(year, 0, 1);
+      const weekNo = Math.floor(((monday - startOfYear) / 86400000 + ((startOfYear.getDay() + 6) % 7)) / 7) + 1;
+      key = `${year}-W${String(weekNo).padStart(2, '0')}`;
+    } else if (period === 'yearly') {
+      key = `${d.getFullYear()}`;
+    } else {
+      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    bucketMap.set(key, (bucketMap.get(key) || 0) + (t.pnl || 0));
   });
 
-  const labels = Array.from(monthlyMap.keys());
-  const monthlyVals = Array.from(monthlyMap.values());
+  const labels = Array.from(bucketMap.keys());
+  const bucketVals = Array.from(bucketMap.values());
   const cumulative = [];
-  monthlyVals.reduce((acc, v, i) => {
+  bucketVals.reduce((acc, v, i) => {
     const next = acc + v;
     cumulative[i] = next;
     return next;

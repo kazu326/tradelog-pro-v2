@@ -4,7 +4,7 @@
  */
 import { getTrades } from '../../core/storage.js';
 import { calculateStats, calculateDrawdown } from '../../core/analytics.js';
-import { renderMonthlyCumulativePnlChart } from './charts.js';
+import { renderCumulativePnlChart } from './charts.js';
 import { showToast } from '../../ui/toast.js';
 
 // 初期化済みセクションを追跡
@@ -281,7 +281,18 @@ function buildDetailTab() {
 function buildGraphsTab() {
   return `
     <div class="graphs-section">
-      <h3 style="margin-bottom: 12px;">📈 月間損益（累積）</h3>
+      <div class="graphs-toolbar" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">📈 累積損益</h3>
+        <div class="period-selector" style="margin-left:auto;">
+          <select id="analytics-period" aria-label="集計期間">
+            <option value="monthly" selected>月次</option>
+            <option value="weekly">週次</option>
+            <option value="daily">日次</option>
+            <option value="yearly">年次</option>
+          </select>
+        </div>
+        <span id="analytics-datascarce" style="display:none; font-size:12px; color:var(--color-warning); border:1px solid var(--color-warning); padding:2px 6px; border-radius:6px;">データ不足</span>
+      </div>
       <div class="chart-card">
         <div class="chart-container">
           <canvas id="monthly-pnl-canvas" aria-label="月間損益グラフ" role="img"></canvas>
@@ -311,6 +322,7 @@ function setupTabs() {
  * タブを切替
  */
 let graphsInitialized = false;
+let currentPeriod = 'monthly';
 
 function switchTab(tab) {
   // ボタンの状態を更新
@@ -333,21 +345,62 @@ function switchTab(tab) {
     if (!graphsInitialized) {
       initGraphsLazy();
     }
+    // 期間セレクターのバインド（重複防止のため毎回差し替え）
+    const sel = document.getElementById('analytics-period');
+    if (sel && !sel._bound) {
+      sel.value = currentPeriod;
+      sel.addEventListener('change', () => {
+        currentPeriod = sel.value || 'monthly';
+        showGraphsLoading();
+        initGraphsLazy();
+      });
+      sel._bound = true;
+    }
   }
 }
 
 function initGraphsLazy(tradesCache) {
   const run = async () => {
     const trades = tradesCache || await getTrades(1000);
-    await renderMonthlyCumulativePnlChart({
+    const scarceBadge = document.getElementById('analytics-datascarce');
+    if (scarceBadge) scarceBadge.style.display = 'none';
+    await renderCumulativePnlChart({
       canvasId: 'monthly-pnl-canvas',
       trades,
-      chartId: 'monthly-pnl'
+      chartId: 'monthly-pnl',
+      period: currentPeriod
     });
+    // データ不足（ポイント数が2未満）
+    const labelsCount = document.getElementById('monthly-pnl-canvas')?.__chart?.data?.labels?.length;
+    if (scarceBadge && (Array.isArray(labelsCount) ? labelsCount.length < 2 : (labelsCount || 0) < 2)) {
+      scarceBadge.style.display = '';
+    }
     graphsInitialized = true;
+    hideGraphsLoading();
   };
   // UIスレッドブロックを避けて非同期に実行
   setTimeout(run, 0);
+}
+
+function showGraphsLoading() {
+  const container = document.querySelector('#analytics-graphs .chart-container');
+  if (!container) return;
+  container.setAttribute('data-loading', '1');
+  if (!container.querySelector('.chart-loading')) {
+    const d = document.createElement('div');
+    d.className = 'chart-loading';
+    d.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.6);font-size:14px;';
+    d.textContent = '読み込み中...';
+    container.appendChild(d);
+  }
+}
+
+function hideGraphsLoading() {
+  const container = document.querySelector('#analytics-graphs .chart-container');
+  if (!container) return;
+  container.removeAttribute('data-loading');
+  const d = container.querySelector('.chart-loading');
+  if (d) d.remove();
 }
 
 /**
