@@ -1,3 +1,4 @@
+// Importer index v2 - 2025-11-07
 import { validateAndNormalizeTrade } from '../core/types.js';
 import { showToast } from '../ui/toast.js';
 import { saveTrade } from '../core/storage.js';
@@ -25,6 +26,33 @@ export function parseClipboard(text) {
   const trimmed = text.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return parseJSON(trimmed);
   return parseCSV(trimmed);
+}
+
+/** Google Sheets の公開URL → CSVエクスポートURLへ変換 */
+export function toGoogleSheetsCsvUrl(url) {
+  try {
+    const u = new URL(url);
+    // 例: https://docs.google.com/spreadsheets/d/<ID>/edit#gid=0
+    if (u.hostname.includes('docs.google.com') && u.pathname.includes('/spreadsheets/d/')) {
+      const parts = u.pathname.split('/');
+      const idIndex = parts.indexOf('d');
+      const sheetId = parts[idIndex + 1];
+      const gidMatch = (u.hash||'').match(/gid=(\d+)/);
+      const gid = gidMatch ? gidMatch[1] : '0';
+      return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+    }
+  } catch {}
+  return url; // 変換不可ならそのまま
+}
+
+/** URLからCSV/JSONを取得してパース（シンプル） */
+export async function parseFromUrl(url) {
+  const target = toGoogleSheetsCsvUrl(url);
+  const res = await fetch(target, { mode: 'cors' });
+  const text = await res.text();
+  const t = text.trim();
+  if (t.startsWith('[') || t.startsWith('{')) return parseJSON(t);
+  return parseCSV(t);
 }
 
 /** XLSX: 可能なら動的読み込み（SheetJS） */

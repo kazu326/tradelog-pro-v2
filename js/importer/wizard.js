@@ -1,4 +1,5 @@
-import { parseCSV, parseJSON, parseClipboard, parseXLSX, parseFromUrl, importTrades } from './index.js';
+// Import wizard v2 - 2025-11-07
+import * as Importer from './index.js';
 import { showToast } from '../ui/toast.js';
 
 export function openImportWizard() {
@@ -92,21 +93,30 @@ export function openImportWizard() {
       const mode = sel.value;
       if (mode === 'paste') {
         const txt = text.value.trim();
-        rows = parseClipboard(txt);
+        rows = Importer.parseClipboard(txt);
       } else if (mode === 'csv') {
         const gsUrl = wrap.querySelector('#imp-gsheets-url').value.trim();
         if (gsUrl) {
-          rows = await parseFromUrl(gsUrl);
+          if (Importer.parseFromUrl) {
+            rows = await Importer.parseFromUrl(gsUrl);
+          } else {
+            // フォールバック: 直接fetchしてCSVとして扱う
+            try {
+              const res = await fetch(gsUrl, { mode: 'cors' });
+              const txt = await res.text();
+              rows = Importer.parseCSV(txt);
+            } catch { rows = []; }
+          }
         } else {
           const buf = await readFileAsText(file.files?.[0]);
-          rows = parseCSV(buf);
+          rows = Importer.parseCSV(buf);
         }
       } else if (mode === 'json') {
         const buf = await readFileAsText(file.files?.[0]);
-        rows = parseJSON(buf);
+        rows = Importer.parseJSON(buf);
       } else if (mode === 'xlsx') {
         const ab = await readFileAsArrayBuffer(file.files?.[0]);
-        rows = await parseXLSX(ab);
+        rows = await Importer.parseXLSX(ab);
       }
       bar.style.width = '30%';
 
@@ -116,7 +126,7 @@ export function openImportWizard() {
         return;
       }
 
-      const { okCount, ngCount, samples } = await importTrades(rows);
+      const { okCount, ngCount, samples } = await Importer.importTrades(rows);
       bar.style.width = '90%';
 
       renderPreview(wrap.querySelector('#imp-preview'), samples, okCount, ngCount);
