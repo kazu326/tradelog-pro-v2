@@ -3,6 +3,11 @@ import { showToast } from '../ui/toast.js';
 
 export function openImportWizard() {
   if (document.getElementById('import-wizard')) return;
+  
+  // bodyのスクロールを無効化（横ブレ防止）
+  const originalOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+  
   const wrap = document.createElement('div');
   wrap.id = 'import-wizard';
   wrap.innerHTML = `
@@ -36,7 +41,10 @@ export function openImportWizard() {
   `;
   document.body.appendChild(wrap);
 
-  const close = () => wrap.remove();
+  const close = () => {
+    document.body.style.overflow = originalOverflow;
+    wrap.remove();
+  };
   wrap.querySelector('.modal__close').addEventListener('click', close);
   wrap.querySelector('.modal-backdrop').addEventListener('click', close);
 
