@@ -43,64 +43,79 @@ export async function initAIAnalysis(container) {
     container.removeEventListener('click', existingHandler);
   }
   
-  // 新しいイベントハンドラーを作成（モバイル対応）
+  // 新しいイベントハンドラーを作成（モバイル対応・改善版）
   let isProcessing = false; // 重複実行防止
-  let touchHandled = false; // タッチイベント処理フラグ
+  let lastTouchTime = 0; // 最後のタッチ時刻
   
+  // 統一されたハンドラー関数
+  const handleButtonClick = (e, provider) => {
+    if (isProcessing) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('AI分析ボタンがタップされました:', provider);
+    
+    isProcessing = true;
+    
+    // ボタンの視覚的フィードバック
+    const button = e.target.closest('[data-provider]');
+    if (button) {
+      button.style.opacity = '0.6';
+      button.style.transform = 'scale(0.95)';
+    }
+    
+    // 非同期処理
+    handleAIAnalysis(provider)
+      .finally(() => {
+        // ボタンの視覚的フィードバックをリセット
+        if (button) {
+          setTimeout(() => {
+            button.style.opacity = '';
+            button.style.transform = '';
+            isProcessing = false;
+          }, 500);
+        } else {
+          setTimeout(() => {
+            isProcessing = false;
+          }, 500);
+        }
+      });
+  };
+  
+  // タッチイベント（モバイル優先）
+  container.addEventListener('touchstart', (e) => {
+    const button = e.target.closest('[data-provider]');
+    if (button && !isProcessing) {
+      const now = Date.now();
+      // 300ms以内の連続タッチを無視（ダブルタップ防止）
+      if (now - lastTouchTime < 300) {
+        return;
+      }
+      lastTouchTime = now;
+      
+      const provider = button.dataset.provider;
+      handleButtonClick(e, provider);
+    }
+  }, { passive: false });
+  
+  // クリックイベント（PC用）
   const clickHandler = (e) => {
-    // モバイルでタッチイベントが既に処理された場合はスキップ
-    if (touchHandled) {
-      touchHandled = false; // フラグをリセット
+    // タッチイベントが処理された場合はスキップ
+    if (Date.now() - lastTouchTime < 500) {
       return;
     }
     
     const button = e.target.closest('[data-provider]');
-    if (button && container.contains(button) && !isProcessing) {
-      e.preventDefault();
-      e.stopPropagation(); // イベントの伝播を停止
-      
+    if (button && !isProcessing) {
       const provider = button.dataset.provider;
-      console.log('AI分析ボタンがクリックされました:', provider);
-      
-      isProcessing = true;
-      
-      // 非同期処理なので、完了後にフラグをリセット
-      handleAIAnalysis(provider)
-        .finally(() => {
-          // 少し遅延を入れてからフラグをリセット（連続クリック防止）
-          setTimeout(() => {
-            isProcessing = false;
-          }, 1000);
-        });
+      handleButtonClick(e, provider);
     }
   };
-  
-  container.addEventListener('touchstart', (e) => {
-    touchHandled = false;
-  }, { passive: true });
-  
-  container.addEventListener('touchend', (e) => {
-    // タッチイベントでも同じ処理を実行
-    const button = e.target.closest('[data-provider]');
-    if (button && container.contains(button) && !isProcessing && !touchHandled) {
-      touchHandled = true;
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const provider = button.dataset.provider;
-      console.log('AI分析ボタンがタッチされました:', provider);
-      
-      isProcessing = true;
-      
-      handleAIAnalysis(provider)
-        .finally(() => {
-          setTimeout(() => {
-            isProcessing = false;
-            touchHandled = false;
-          }, 1000);
-        });
-    }
-  }, { passive: false });
   
   container.addEventListener('click', clickHandler, { passive: false });
   
@@ -138,77 +153,192 @@ async function handleAIAnalysis(provider) {
       includeGoals
     });
     
-    // クリップボードにコピー（モバイル対応）
-    let copySuccess = false;
-    try {
-      await copyToClipboard(prompt);
-      copySuccess = true;
-      showToast('プロンプトをコピーしました！AIチャットに貼り付けてください', 'success');
-    } catch (copyError) {
-      console.error('コピーエラー:', copyError);
-      // モバイルでコピーに失敗した場合でも、プロンプトを表示して続行
-      copySuccess = false;
-      showToast('コピーできませんでした。プロンプトは下に表示されます', 'warning');
-      
-      // プロンプトを画面に表示（モバイル用フォールバック）
-      const promptDisplay = document.createElement('div');
-      promptDisplay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.9);
-        z-index: 10000;
-        padding: 20px;
-        overflow-y: auto;
-        color: white;
-      `;
-      promptDisplay.innerHTML = `
-        <div style="max-width: 600px; margin: 0 auto;">
-          <h2 style="color: white; margin-bottom: 20px;">生成されたプロンプト</h2>
-          <pre style="background: #1a1a1a; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; color: #e0e0e0;">${prompt}</pre>
-          <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">閉じる</button>
-        </div>
-      `;
-      document.body.appendChild(promptDisplay);
+    // 既存のプロンプト表示があれば閉じる
+    const existingPrompt = document.getElementById('ai-prompt-display');
+    if (existingPrompt) {
+      existingPrompt.remove();
     }
     
-    // 別タブ起動（モバイル対応）
-    // モバイルではwindow.openがブロックされる可能性があるため、ユーザーアクション内で実行
+    // プロンプトを画面に表示（モバイル用、コンパクトなサイズ）
+    const promptDisplay = document.createElement('div');
+    promptDisplay.id = 'ai-prompt-display';
+    promptDisplay.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      max-width: 600px;
+      max-height: 70vh;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      color: white;
+      display: flex;
+      flex-direction: column;
+    `;
+    
+    // プロンプトテキストエリア（スクロール可能、コンパクト）
+    const promptText = document.createElement('textarea');
+    promptText.value = prompt;
+    promptText.readOnly = true;
+    promptText.style.cssText = `
+      flex: 1;
+      min-height: 200px;
+      max-height: 50vh;
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 5px;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      resize: none;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    `;
+    
+    // ボタンコンテナ
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    `;
+    
+    // コピーボタン
+    const copyButton = document.createElement('button');
+    copyButton.textContent = '📋 コピー';
+    copyButton.style.cssText = `
+      flex: 1;
+      min-width: 120px;
+      padding: 12px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    `;
+    copyButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        await copyToClipboard(prompt);
+        copyButton.textContent = '✓ コピー完了';
+        copyButton.style.background = '#28a745';
+        setTimeout(() => {
+          copyButton.textContent = '📋 コピー';
+          copyButton.style.background = '#007bff';
+        }, 2000);
+      } catch (err) {
+        console.error('コピーエラー:', err);
+        copyButton.textContent = '✗ コピー失敗';
+        copyButton.style.background = '#dc3545';
+        setTimeout(() => {
+          copyButton.textContent = '📋 コピー';
+          copyButton.style.background = '#007bff';
+        }, 2000);
+      }
+    });
+    
+    // AIチャットを開くボタン
     const urls = {
       chatgpt: 'https://chat.openai.com/',
       claude: 'https://claude.ai/new',
       gemini: 'https://gemini.google.com/'
     };
     
-    const url = urls[provider];
-    if (url) {
-      // モバイルでは即座に開く（ユーザーアクション内）
-      try {
-        const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
-        // モバイルでポップアップブロックされた場合のフォールバック
-        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-          showToast('ポップアップがブロックされました。リンクを手動で開いてください', 'warning');
-          // リンクをクリック可能な要素として表示
-          const linkElement = document.createElement('a');
-          linkElement.href = url;
-          linkElement.target = '_blank';
-          linkElement.rel = 'noopener noreferrer';
-          linkElement.textContent = `${provider}を開く`;
-          linkElement.style.cssText = 'display: block; margin-top: 10px; padding: 10px; background: #007bff; color: white; text-align: center; text-decoration: none; border-radius: 5px;';
-          // 適切な場所に追加（例: トーストの近く）
-          setTimeout(() => {
-            const toast = document.querySelector('.toast');
-            if (toast && toast.parentElement) {
-              toast.parentElement.appendChild(linkElement);
-            }
-          }, 100);
-        }
-      } catch (openError) {
-        console.error('Window open error:', openError);
-        showToast(`${provider}を開けませんでした。手動で開いてください`, 'error');
+    const openButton = document.createElement('button');
+    openButton.textContent = `🚀 ${provider.toUpperCase()}を開く`;
+    openButton.style.cssText = `
+      flex: 1;
+      min-width: 120px;
+      padding: 12px 20px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    `;
+    openButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = urls[provider];
+      if (url) {
+        // ユーザーアクション内で確実に開く
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
+    });
+    
+    // 閉じるボタン
+    const closeButton = document.createElement('button');
+    closeButton.textContent = '✕ 閉じる';
+    closeButton.style.cssText = `
+      flex: 1;
+      min-width: 120px;
+      padding: 12px 20px;
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    `;
+    closeButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      promptDisplay.remove();
+    });
+    
+    // 背景クリックで閉じる
+    promptDisplay.addEventListener('click', (e) => {
+      if (e.target === promptDisplay) {
+        promptDisplay.remove();
+      }
+    });
+    
+    buttonContainer.appendChild(copyButton);
+    buttonContainer.appendChild(openButton);
+    buttonContainer.appendChild(closeButton);
+    
+    promptDisplay.innerHTML = `
+      <h2 style="color: white; margin-bottom: 15px; font-size: 18px; text-align: center;">生成されたプロンプト</h2>
+    `;
+    promptDisplay.appendChild(promptText);
+    promptDisplay.appendChild(buttonContainer);
+    
+    document.body.appendChild(promptDisplay);
+    
+    // 自動でコピーを試みる
+    try {
+      await copyToClipboard(prompt);
+      showToast('プロンプトをコピーしました！', 'success');
+    } catch (copyError) {
+      console.warn('自動コピーに失敗しましたが、手動でコピーできます:', copyError);
+      // エラーは無視（手動コピー可能）
     }
     
   } catch (error) {
