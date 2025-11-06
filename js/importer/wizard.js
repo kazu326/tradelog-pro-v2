@@ -36,9 +36,6 @@ export function openImportWizard() {
             <input type="url" id="imp-gsheets-url" placeholder="Googleスプレッドシートの共有URL（閲覧可能に設定）" style="width:100%"/>
             <small class="help-text">共有リンクを貼るとCSVとして読み込みます</small>
           </div>
-          <div style="display:flex; gap:8px; width:100%; justify-content:flex-end;">
-            <button id="load-sample" type="button">サンプルを読み込む</button>
-          </div>
         </div>
         <div class="progress-bar" id="imp-progress" style="display:none"><div></div></div>
         <div class="import-preview" id="imp-preview"></div>
@@ -68,18 +65,6 @@ export function openImportWizard() {
     file.style.display = (v==='paste') ? 'none' : '';
     text.style.display = (v==='paste') ? '' : 'none';
     wrap.querySelector('#gsheets-block').style.display = (v==='csv') ? '' : 'none';
-  });
-
-  wrap.querySelector('#load-sample').addEventListener('click', () => {
-    // サンプルCSVをテキストエリアに投入（モバイルでも体験可）
-    const sample = `created_at,pair,direction,entry_price,exit_price,lot_size,pips,pnl,notes\n`+
-                   `2025-01-05T09:15:00Z,USDJPY,buy,145.12,145.42,0.2,30,1200,ブレイクアウト\n`+
-                   `2025-01-06T02:10:00Z,EURUSD,sell,1.0950,1.0925,0.1,25,900,戻り売り\n`+
-                   `2025-01-07T13:40:00Z,GBPJPY,sell,186.20,186.55,0.15,-35,-1400,逆行カット`;
-    sel.value = 'paste';
-    file.style.display = 'none';
-    text.style.display = '';
-    text.value = sample;
   });
 
   wrap.querySelector('#imp-run').addEventListener('click', async () => {
