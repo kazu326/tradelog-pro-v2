@@ -7,12 +7,23 @@ import { saveChartInstance, destroyChart } from './index.js';
 let ChartCtor = null;
 
 async function getChartModule() {
-  if (!ChartCtor) {
-    // Chart.js (auto) のESM版を動的読み込み（ブラウザ向け）
-    const mod = await import('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/auto');
-    // autoビルドは default エクスポート
-    ChartCtor = mod.default || mod.Chart || mod;
+  // 既にグローバルにある場合
+  if (window.Chart) {
+    ChartCtor = window.Chart;
+    return ChartCtor;
   }
+  if (ChartCtor) return ChartCtor;
+
+  // UMD版をスクリプトタグで動的読込（互換性が高い）
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Chart.js の読み込みに失敗しました'));
+    document.head.appendChild(script);
+  });
+  ChartCtor = window.Chart;
   return ChartCtor;
 }
 

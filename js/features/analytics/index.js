@@ -48,6 +48,12 @@ export async function initAnalytics(container) {
     // タブとアコーディオンのイベントリスナーを設定
     setupTabs();
     setupAccordions(trades);
+
+    // 初期タブが graphs の場合は、初回描画を即時実行
+    const savedTab = localStorage.getItem('analytics:tab') || 'overview';
+    if (savedTab === 'graphs') {
+      initGraphsLazy(trades);
+    }
     
   } catch (error) {
     console.error('分析ページの初期化エラー:', error);
@@ -325,18 +331,23 @@ function switchTab(tab) {
   } else {
     // 初回のみグラフ初期化（遅延ロード）
     if (!graphsInitialized) {
-      // trades はグローバル閉包ではないため、DOMから再計算を避ける目的で
-      // window.app.currentUser 等とは別に、必要最小限のデータだけ再取得
-      getTrades(1000).then(trades => {
-        renderMonthlyCumulativePnlChart({
-          canvasId: 'monthly-pnl-canvas',
-          trades,
-          chartId: 'monthly-pnl'
-        });
-        graphsInitialized = true;
-      }).catch(() => {});
+      initGraphsLazy();
     }
   }
+}
+
+function initGraphsLazy(tradesCache) {
+  const run = async () => {
+    const trades = tradesCache || await getTrades(1000);
+    await renderMonthlyCumulativePnlChart({
+      canvasId: 'monthly-pnl-canvas',
+      trades,
+      chartId: 'monthly-pnl'
+    });
+    graphsInitialized = true;
+  };
+  // UIスレッドブロックを避けて非同期に実行
+  setTimeout(run, 0);
 }
 
 /**
