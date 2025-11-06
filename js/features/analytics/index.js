@@ -49,6 +49,7 @@ export async function initAnalytics(container) {
     // タブとアコーディオンのイベントリスナーを設定
     setupTabs();
     setupAccordions(trades);
+    bindImportButton();
 
     // 初期タブが graphs の場合は、初回描画を即時実行
     const savedTab = localStorage.getItem('analytics:tab') || 'overview';
@@ -340,6 +341,8 @@ function switchTab(tab) {
   document.querySelectorAll('.analytics-tab-pane').forEach(pane => {
     pane.classList.toggle('active', pane.id === `analytics-${tab}`);
   });
+  // インポートボタンを常にバインド（モバイル対策）
+  bindImportButton();
   
   // グラフタブの場合はチャートを破棄
   if (tab !== 'graphs') {
@@ -360,11 +363,20 @@ function switchTab(tab) {
       });
       sel._bound = true;
     }
-    const impBtn = document.getElementById('open-import-wizard');
-    if (impBtn && !impBtn._bound) {
-      impBtn.addEventListener('click', () => openImportWizard());
-      impBtn._bound = true;
-    }
+  }
+}
+
+function bindImportButton() {
+  const impBtn = document.getElementById('open-import-wizard');
+  if (impBtn && !impBtn._bound) {
+    const handler = (e) => {
+      e.preventDefault();
+      openImportWizard();
+    };
+    impBtn.addEventListener('click', handler, { passive: false });
+    // タッチ環境での反応性向上
+    impBtn.addEventListener('touchend', handler, { passive: false });
+    impBtn._bound = true;
   }
 }
 
