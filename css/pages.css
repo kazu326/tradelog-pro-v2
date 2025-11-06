@@ -9,7 +9,7 @@
 /* 概要カード（4つ横並び） */
 .summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-md);
   margin-bottom: var(--space-xl);
 }
@@ -33,6 +33,11 @@
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s, box-shadow 0.2s;
+  min-height: 100px;
+  max-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .summary-card:hover {
@@ -86,6 +91,367 @@
 
 .summary-card--neutral .summary-card__value {
   color: var(--color-text);
+}
+
+/* タブ */
+.analytics-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.analytics-tab-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  transition: color 0.2s, border-color 0.2s;
+  margin-bottom: -2px;
+}
+
+.analytics-tab-btn:hover {
+  color: var(--color-text);
+}
+
+.analytics-tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.analytics-tab-pane {
+  display: none;
+}
+
+.analytics-tab-pane.active {
+  display: block;
+}
+
+/* アコーディオン */
+.accordion {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-md);
+  overflow: hidden;
+}
+
+.accordion__toggle {
+  width: 100%;
+  padding: var(--space-md) var(--space-lg);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  transition: background 0.2s;
+}
+
+.accordion__toggle:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.accordion__toggle:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.accordion__title {
+  font-weight: 500;
+}
+
+.accordion__icon {
+  transition: transform 0.2s;
+  font-size: var(--font-size-sm);
+}
+
+.accordion--open .accordion__icon {
+  transform: rotate(180deg);
+}
+
+.accordion__content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.accordion--open .accordion__content {
+  max-height: 5000px;
+  transition: max-height 0.5s ease-in;
+}
+
+.accordion__body {
+  padding: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+/* 通貨ペア別統計 */
+.pair-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-md);
+}
+
+.pair-stat-card {
+  background: var(--color-background);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.pair-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.pair-stat-pair {
+  font-weight: bold;
+  font-size: var(--font-size-lg);
+}
+
+.pair-stat-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.pair-stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: bold;
+  margin-bottom: var(--space-xs);
+}
+
+.pair-stat-value.positive {
+  color: var(--color-success);
+}
+
+.pair-stat-value.negative {
+  color: var(--color-error);
+}
+
+.pair-stat-winrate {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* 時間帯別・曜日別・ロット別統計 */
+.time-stats-list,
+.day-stats-list,
+.lot-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.time-stat-item,
+.day-stat-item,
+.lot-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  background: var(--color-background);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.time-stat-label,
+.day-stat-label,
+.lot-stat-label {
+  font-weight: 500;
+  flex: 1;
+}
+
+.time-stat-details,
+.day-stat-details,
+.lot-stat-details {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.time-stat-count,
+.day-stat-count,
+.lot-stat-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.time-stat-pnl,
+.day-stat-pnl,
+.lot-stat-pnl {
+  font-weight: bold;
+}
+
+.time-stat-pnl.positive,
+.day-stat-pnl.positive,
+.lot-stat-pnl.positive {
+  color: var(--color-success);
+}
+
+.time-stat-pnl.negative,
+.day-stat-pnl.negative,
+.lot-stat-pnl.negative {
+  color: var(--color-error);
+}
+
+.time-stat-winrate,
+.day-stat-winrate,
+.lot-stat-winrate {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* 連勝・連敗統計 */
+.streak-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-md);
+}
+
+.streak-card {
+  background: var(--color-background);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.streak-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.streak-value {
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.streak-value.positive {
+  color: var(--color-success);
+}
+
+.streak-value.negative {
+  color: var(--color-error);
+}
+
+/* リスク管理スコア */
+.risk-score-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.risk-score-display {
+  text-align: center;
+  padding: var(--space-xl);
+  background: var(--color-background);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--color-border);
+  margin-bottom: var(--space-lg);
+}
+
+.risk-score-value {
+  font-size: 48px;
+  font-weight: bold;
+  color: var(--color-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.risk-score-label {
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+}
+
+.risk-score-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.risk-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  background: var(--color-background);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.risk-item-label {
+  font-weight: 500;
+}
+
+.risk-item-value {
+  font-weight: bold;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.risk-item-value.good {
+  background: rgba(33, 128, 141, 0.1);
+  color: var(--color-success);
+}
+
+.risk-item-value.fair {
+  background: rgba(168, 75, 47, 0.1);
+  color: var(--color-warning);
+}
+
+.risk-item-value.poor {
+  background: rgba(192, 21, 47, 0.1);
+  color: var(--color-error);
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+  .pair-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .time-stat-details,
+  .day-stat-details,
+  .lot-stat-details {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-xs);
+  }
+  
+  .streak-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .pair-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .time-stat-item,
+  .day-stat-item,
+  .lot-stat-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+  
+  .time-stat-details,
+  .day-stat-details,
+  .lot-stat-details {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+  }
 }
 
 /**

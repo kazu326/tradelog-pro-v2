@@ -5,7 +5,7 @@ import { supabaseClient, getCurrentUser, getUserProfile, onAuthStateChange, sign
 import { initTradeRecord } from './features/trade-record.js';
 import { initLotCalculator } from './features/lot-calculator.js';
 import { initAIAnalysis } from './features/ai-analysis.js';
-import { initAnalytics } from './features/analytics.js';
+import { initAnalytics } from './features/analytics/index.js';
 import { showToast } from './ui/toast.js';
 
 // グローバル状態
