@@ -43,6 +43,13 @@
   width: 100%;
 }
 
+/* モーダル表示時の横スライド抑制 */
+body.no-scroll {
+  overflow: hidden !important;
+  width: 100vw; /* スクロールバー除去による横ズレ防止 */
+  touch-action: pan-y; /* 横方向のパンを抑制 */
+}
+
 /* モーダル/インポートUI 共通 */
 .modal-backdrop {
   position: fixed;
@@ -50,6 +57,7 @@
   background: rgba(0,0,0,0.35);
   z-index: 9998;
   overflow: hidden;
+  touch-action: none; /* 背景のジェスチャー無効化 */
 }
 
 .modal {
@@ -68,6 +76,7 @@
   flex-direction: column;
   z-index: 9999;
   overflow: hidden;
+  touch-action: pan-y; /* モーダル上の横パンを抑制（縦スクロールのみ） */
 }
 
 @media (max-width: 480px) {
@@ -104,6 +113,8 @@
   overflow-x: hidden;
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain; /* モーダル内にスクロールを閉じ込める */
+  touch-action: pan-y;
 }
 
 .modal__close {

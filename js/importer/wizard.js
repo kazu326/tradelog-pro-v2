@@ -1,4 +1,4 @@
-import { parseCSV, parseJSON, parseClipboard, parseXLSX, importTrades } from './index.js';
+import { parseCSV, parseJSON, parseClipboard, parseXLSX, parseFromUrl, importTrades } from './index.js';
 import { showToast } from '../ui/toast.js';
 
 export function openImportWizard() {
@@ -6,7 +6,8 @@ export function openImportWizard() {
   
   // bodyのスクロールを無効化（横ブレ防止）
   const originalOverflow = document.body.style.overflow;
-  document.body.style.overflow = 'hidden';
+  const originalWidth = document.body.style.width;
+  document.body.classList.add('no-scroll');
   
   const wrap = document.createElement('div');
   wrap.id = 'import-wizard';
@@ -27,9 +28,16 @@ export function openImportWizard() {
             <option value="paste">コピペ</option>
           </select>
         </div>
-        <div class="import-controls">
+        <div class="import-controls" style="flex-wrap:wrap;">
           <input type="file" id="imp-file" accept=".csv,.json,.xlsx" />
-          <textarea id="imp-text" placeholder="ここに貼り付け（CSV/JSON 自動判別）" style="display:none;height:120px"></textarea>
+          <textarea id="imp-text" placeholder="ここに貼り付け（CSV/JSON 自動判別）" style="display:none;height:120px;width:100%"></textarea>
+          <div id="gsheets-block" style="display:none; width:100%;">
+            <input type="url" id="imp-gsheets-url" placeholder="Googleスプレッドシートの共有URL（閲覧可能に設定）" style="width:100%"/>
+            <small class="help-text">共有リンクを貼るとCSVとして読み込みます</small>
+          </div>
+          <div style="display:flex; gap:8px; width:100%; justify-content:flex-end;">
+            <button id="load-sample" type="button">サンプルを読み込む</button>
+          </div>
         </div>
         <div class="progress-bar" id="imp-progress" style="display:none"><div></div></div>
         <div class="import-preview" id="imp-preview"></div>
@@ -42,8 +50,11 @@ export function openImportWizard() {
   document.body.appendChild(wrap);
 
   const close = () => {
-    document.body.style.overflow = originalOverflow;
     wrap.remove();
+    // 復元
+    document.body.classList.remove('no-scroll');
+    document.body.style.overflow = originalOverflow;
+    document.body.style.width = originalWidth;
   };
   wrap.querySelector('.modal__close').addEventListener('click', close);
   wrap.querySelector('.modal-backdrop').addEventListener('click', close);
@@ -55,6 +66,19 @@ export function openImportWizard() {
     const v = sel.value;
     file.style.display = (v==='paste') ? 'none' : '';
     text.style.display = (v==='paste') ? '' : 'none';
+    wrap.querySelector('#gsheets-block').style.display = (v==='csv') ? '' : 'none';
+  });
+
+  wrap.querySelector('#load-sample').addEventListener('click', () => {
+    // サンプルCSVをテキストエリアに投入（モバイルでも体験可）
+    const sample = `created_at,pair,direction,entry_price,exit_price,lot_size,pips,pnl,notes\n`+
+                   `2025-01-05T09:15:00Z,USDJPY,buy,145.12,145.42,0.2,30,1200,ブレイクアウト\n`+
+                   `2025-01-06T02:10:00Z,EURUSD,sell,1.0950,1.0925,0.1,25,900,戻り売り\n`+
+                   `2025-01-07T13:40:00Z,GBPJPY,sell,186.20,186.55,0.15,-35,-1400,逆行カット`;
+    sel.value = 'paste';
+    file.style.display = 'none';
+    text.style.display = '';
+    text.value = sample;
   });
 
   wrap.querySelector('#imp-run').addEventListener('click', async () => {
@@ -70,8 +94,13 @@ export function openImportWizard() {
         const txt = text.value.trim();
         rows = parseClipboard(txt);
       } else if (mode === 'csv') {
-        const buf = await readFileAsText(file.files?.[0]);
-        rows = parseCSV(buf);
+        const gsUrl = wrap.querySelector('#imp-gsheets-url').value.trim();
+        if (gsUrl) {
+          rows = await parseFromUrl(gsUrl);
+        } else {
+          const buf = await readFileAsText(file.files?.[0]);
+          rows = parseCSV(buf);
+        }
       } else if (mode === 'json') {
         const buf = await readFileAsText(file.files?.[0]);
         rows = parseJSON(buf);
