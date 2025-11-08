@@ -43,6 +43,23 @@
   width: 100%;
 }
 
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
 /* モーダル表示時の横スライド抑制 */
 body.no-scroll {
   overflow: hidden !important;
