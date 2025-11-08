@@ -120,7 +120,7 @@ async function checkAuth() {
 function handleAuthChange(event, session) {
   console.log('Auth state changed:', event);
   
-  if (event === 'SIGNED_IN') {
+  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
     // 非同期関数を呼び出す際はエラーハンドリングを追加
     checkAuth().catch(error => {
       console.error('❌ 認証状態変化時のエラー:', error);
