@@ -2,12 +2,11 @@
  * Supabase クライアント初期化
  */
 
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
 // ⚠️ あとで自分のSupabase情報に置き換えてください
 const SUPABASE_URL = 'https://dbjecojhzsnadyjghval.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiamVjb2poenNuYWR5amdodmFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyMjM3NDEsImV4cCI6MjA3Nzc5OTc0MX0._6sNC0-sG8jLQRE8GTOc17WiNr4tHYwGmUt6thQFrRw';
-
-// Supabase CDNから読み込み
-const { createClient } = supabase;
 
 // クライアント初期化
 export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
