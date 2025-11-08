@@ -1,148 +1,325 @@
-/**
- * ロット計算ツール
- */
+import { getDerivedSettings, getSettings, updateSettings, applyPreset, resetSettings, PRESET_LABELS } from '../core/settings.js';
 
+/**
+ * 取引設定とロット計算ツール
+ */
 export function initLotCalculator(container) {
   container.innerHTML = `
-    <div class="lot-calculator-container">
-      <h2>ロット計算ツール</h2>
-      <p class="description">2%ルールに基づいて適切なロットサイズを計算します</p>
+    <div class="settings-page">
+      <section class="account-settings-card">
+        <h2>取引口座設定</h2>
+        <p class="description">
+          FX・ゴールドのロットサイズ / pip設定を口座タイプに合わせて管理します。<br>
+          ここで設定した値は記録フォームや分析でも自動的に使用されます。
+        </p>
 
-      <div class="calculator-card">
-        <div class="form-group">
-          <label>口座残高（円）</label>
-          <input type="number" id="account-balance" value="1000000" />
+        <div class="settings-grid">
+          <div class="form-group">
+            <label for="fx-preset">FX口座タイプ</label>
+            <select id="fx-preset">
+              <option value="fx-overseas">${PRESET_LABELS['fx-overseas']}</option>
+              <option value="fx-domestic">${PRESET_LABELS['fx-domestic']}</option>
+              <option value="fx-micro">${PRESET_LABELS['fx-micro']}</option>
+              <option value="custom">カスタム設定</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="gold-preset">ゴールド口座タイプ</label>
+            <select id="gold-preset">
+              <option value="gold-standard">${PRESET_LABELS['gold-standard']}</option>
+              <option value="gold-mini">${PRESET_LABELS['gold-mini']}</option>
+              <option value="gold-micro">${PRESET_LABELS['gold-micro']}</option>
+              <option value="custom">カスタム設定</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="usd-jpy-rate">USD/JPY 想定レート</label>
+            <input type="number" id="usd-jpy-rate" step="0.1" min="1" />
+            <small>米ドル建て資産の円換算に使用します</small>
+          </div>
+
+          <div class="form-group">
+            <label for="fx-lot-size">FX 1ロットあたり通貨量</label>
+            <input type="number" id="fx-lot-size" min="1" step="1" />
+            <small>例: 100,000通貨（海外FX） / 10,000通貨（国内FX）</small>
+          </div>
+
+          <div class="form-group">
+            <label for="fx-pip-size-jpy">JPYペアのpip刻み</label>
+            <input type="number" id="fx-pip-size-jpy" min="0.0001" step="0.0001" />
+            <small>通常は 0.01（1銭）</small>
+          </div>
+
+          <div class="form-group">
+            <label for="fx-pip-size-usd">USDペアのpip刻み</label>
+            <input type="number" id="fx-pip-size-usd" min="0.00001" step="0.00001" />
+            <small>通常は 0.0001</small>
+          </div>
+
+          <div class="form-group">
+            <label for="gold-lot-size">ゴールド 1ロットあたり重量（oz）</label>
+            <input type="number" id="gold-lot-size" min="0.01" step="0.01" />
+            <small>例: スタンダード100oz / ミニ10oz / マイクロ1oz</small>
+          </div>
+
+          <div class="form-group">
+            <label for="gold-pip-size">ゴールドのpip刻み（ドル）</label>
+            <input type="number" id="gold-pip-size" min="0.0001" step="0.0001" />
+            <small>例: 0.1（10セント）</small>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>リスク許容率（%）</label>
-          <input type="number" id="risk-percentage" value="2" step="0.1" />
-        </div>
+        <div class="settings-summary" id="pip-summary"></div>
 
-        <div class="form-group">
-          <label>損切り幅（pips）</label>
-          <input type="number" id="stop-loss-pips" value="50" />
+        <div class="settings-actions">
+          <button type="button" id="reset-account-settings" class="btn-secondary">デフォルトに戻す</button>
         </div>
+      </section>
 
-        <div class="form-group">
-          <label style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: block;">
-            あなたの口座タイプを選んでください
-          </label>
-          
-          <!-- ラジオボタン選択 -->
-          <div class="account-type-selector" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
-            <label class="account-type-option" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-              <input type="radio" name="account-type" value="100000" style="margin-right: 12px; width: 20px; height: 20px;" />
-              <div>
-                <div style="font-weight: 600; font-size: 14px;">海外FX（XM・Exness・FXGTなど）</div>
-                <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 100,000通貨 → 1pipsあたり 1000円</div>
-              </div>
+      <section class="lot-calculator-container">
+        <h2>ロット計算ツール</h2>
+        <p class="description">2%ルールに基づいて適切なロットサイズを計算します</p>
+
+        <div class="calculator-card">
+          <div class="form-group">
+            <label>口座残高（円）</label>
+            <input type="number" id="account-balance" value="1000000" />
+          </div>
+
+          <div class="form-group">
+            <label>リスク許容率（%）</label>
+            <input type="number" id="risk-percentage" value="2" step="0.1" />
+          </div>
+
+          <div class="form-group">
+            <label>損切り幅（pips）</label>
+            <input type="number" id="stop-loss-pips" value="50" />
+          </div>
+
+          <div class="form-group">
+            <label style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: block;">
+              口座タイプを参考にする
             </label>
             
-            <label class="account-type-option" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-              <input type="radio" name="account-type" value="10000" style="margin-right: 12px; width: 20px; height: 20px;" />
-              <div>
-                <div style="font-weight: 600; font-size: 14px;">国内FX（SBI・GMO・楽天など）</div>
-                <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 10,000通貨 → 1pipsあたり 100円</div>
-              </div>
-            </label>
+            <div class="account-type-selector" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+              <label class="account-type-option" data-preset="fx-overseas" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
+                <input type="radio" name="account-type" value="fx-overseas" style="margin-right: 12px; width: 20px; height: 20px;" />
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">海外FX（XM・Exness・FXGTなど）</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 100,000通貨 → 1pipsあたり 約1,000円</div>
+                </div>
+              </label>
+              
+              <label class="account-type-option" data-preset="fx-domestic" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
+                <input type="radio" name="account-type" value="fx-domestic" style="margin-right: 12px; width: 20px; height: 20px;" />
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">国内FX（SBI・GMO・楽天など）</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 10,000通貨 → 1pipsあたり 約100円</div>
+                </div>
+              </label>
+              
+              <label class="account-type-option" data-preset="fx-micro" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
+                <input type="radio" name="account-type" value="fx-micro" style="margin-right: 12px; width: 20px; height: 20px;" />
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">マイクロ口座</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 1,000通貨 → 1pipsあたり 約10円</div>
+                </div>
+              </label>
+              
+              <label class="account-type-option" data-preset="custom" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor:pointer; transition: all 0.2s;">
+                <input type="radio" name="account-type" value="custom" style="margin-right: 12px; width: 20px; height: 20px;" />
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">その他・手動設定</div>
+                  <div style="font-size: 12px; color: var(--color-text-secondary);">自分で入力したい場合</div>
+                </div>
+              </label>
+            </div>
             
-            <label class="account-type-option" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-              <input type="radio" name="account-type" value="1000" style="margin-right: 12px; width: 20px; height: 20px;" />
-              <div>
-                <div style="font-weight: 600; font-size: 14px;">マイクロ口座</div>
-                <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 1,000通貨 → 1pipsあたり 10円</div>
-              </div>
-            </label>
-            
-            <label class="account-type-option" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-              <input type="radio" name="account-type" value="custom" style="margin-right: 12px; width: 20px; height: 20px;" />
-              <div>
-                <div style="font-weight: 600; font-size: 14px;">その他・手動設定</div>
-                <div style="font-size: 12px; color: var(--color-text-secondary);">自分で入力したい場合</div>
-              </div>
-            </label>
-          </div>
-          
-          <!-- 現在の設定表示 -->
-          <div id="current-setting" style="display: none; padding: 12px; background: var(--color-bg-1); border-radius: var(--radius-md); margin-bottom: 16px;">
-            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">✅ 自動設定されました：</div>
-            <div style="font-size: 12px; line-height: 1.6;">
-              <div>• 1ロット = <span id="lot-size-display">-</span></div>
-              <div>• 1pipsあたりの価値 = <span id="pip-value-display">-</span></div>
-              <div style="margin-top: 8px; color: var(--color-text-secondary);">
-                💡 これで「1ロットで1pips動くと<span id="pip-value-display-2">-</span>の損益」になります
+            <div id="current-setting" style="display: none; padding: 12px; background: var(--color-bg-1); border-radius: var(--radius-md); margin-bottom: 16px;">
+              <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">✅ 自動設定値</div>
+              <div style="font-size: 12px; line-height: 1.6;">
+                <div>• 1ロット = <span id="lot-size-display">-</span></div>
+                <div>• 1pipsあたりの価値 = <span id="pip-value-display">-</span></div>
               </div>
             </div>
+            
+            <div id="manual-input" style="display: none;">
+              <label style="font-size: 13px; font-weight: 500; margin-bottom: 8px; display: block;">
+                1pipsあたりの価値（円）
+              </label>
+              <input type="number" id="pip-value" value="1000" step="1" min="1" />
+            </div>
           </div>
-          
-          <!-- 手動入力欄 -->
-          <div id="manual-input" style="display: none;">
-            <label style="font-size: 13px; font-weight: 500; margin-bottom: 8px; display: block;">
-              1pipsあたりの価値（円）
-            </label>
-            <input type="number" id="pip-value" value="1000" step="1" min="1" />
+
+          <button id="calculate-btn" class="btn-primary">計算する</button>
+
+          <div id="calculation-result" class="calculation-result" style="display: none;">
+            <h3>計算結果</h3>
+            <div class="result-grid">
+              <div class="result-item">
+                <div class="result-label">許容リスク額</div>
+                <div class="result-value" id="risk-amount">-</div>
+              </div>
+              <div class="result-item">
+                <div class="result-label">推奨ロットサイズ</div>
+                <div class="result-value highlight" id="recommended-lot">-</div>
+              </div>
+              <div class="result-item">
+                <div class="result-label">損切り時の損失</div>
+                <div class="result-value" id="loss-amount">-</div>
+              </div>
+            </div>
           </div>
         </div>
-
-        <button id="calculate-btn" class="btn-primary">計算する</button>
-
-        <div id="calculation-result" class="calculation-result" style="display: none;">
-          <h3>計算結果</h3>
-          <div class="result-grid">
-            <div class="result-item">
-              <div class="result-label">許容リスク額</div>
-              <div class="result-value" id="risk-amount">-</div>
-            </div>
-            <div class="result-item">
-              <div class="result-label">推奨ロットサイズ</div>
-              <div class="result-value highlight" id="recommended-lot">-</div>
-            </div>
-            <div class="result-item">
-              <div class="result-label">損切り時の損失</div>
-              <div class="result-value" id="loss-amount">-</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   `;
 
+  const refreshAccountSettingsView = () => {
+    const { settings, fxJpy, fxUsd, gold } = getDerivedSettings();
+    const fxPreset = document.getElementById('fx-preset');
+    const goldPreset = document.getElementById('gold-preset');
+    const usdJpyRate = document.getElementById('usd-jpy-rate');
+    const fxLotSize = document.getElementById('fx-lot-size');
+    const fxPipSizeJpy = document.getElementById('fx-pip-size-jpy');
+    const fxPipSizeUsd = document.getElementById('fx-pip-size-usd');
+    const goldLotSize = document.getElementById('gold-lot-size');
+    const goldPipSize = document.getElementById('gold-pip-size');
+    const pipSummary = document.getElementById('pip-summary');
+
+    if (fxPreset) fxPreset.value = settings.presetFx || 'custom';
+    if (goldPreset) goldPreset.value = settings.presetGold || 'custom';
+    if (usdJpyRate) usdJpyRate.value = settings.usdJpyRate;
+    if (fxLotSize) fxLotSize.value = settings.fxLotSize;
+    if (fxPipSizeJpy) fxPipSizeJpy.value = settings.fxPipSizeJpy;
+    if (fxPipSizeUsd) fxPipSizeUsd.value = settings.fxPipSizeUsd;
+    if (goldLotSize) goldLotSize.value = settings.goldLotSize;
+    if (goldPipSize) goldPipSize.value = settings.goldPipSize;
+
+    if (pipSummary) {
+      pipSummary.innerHTML = `
+        <strong>現在の設定サマリー</strong>
+        <ul>
+          <li>FX（JPYペア）: 1pips ≒ ${Math.round(fxJpy.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxJpy.pipMultiplier.toFixed(0)}）</li>
+          <li>FX（USDペア）: 1pips ≒ ${Math.round(fxUsd.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxUsd.pipMultiplier.toFixed(0)}）</li>
+          <li>GOLD: 1pips ≒ ${Math.round(gold.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${gold.pipMultiplier.toFixed(0)}）</li>
+        </ul>
+      `;
+    }
+
+    const pipValueInput = document.getElementById('pip-value');
+    if (pipValueInput) {
+      pipValueInput.value = Math.round(fxJpy.pipValuePerLot);
+    }
+  };
+
+  refreshAccountSettingsView();
+
+  const highlightSelectedAccountType = (preset) => {
+    document.querySelectorAll('.account-type-option').forEach(option => {
+      option.style.borderColor = 'var(--color-border)';
+      option.style.background = 'transparent';
+      const input = option.querySelector('input[type="radio"]');
+      if (input) input.checked = false;
+    });
+    if (!preset) return;
+    document.querySelectorAll(`.account-type-option[data-preset="${preset}"]`).forEach(option => {
+      option.style.borderColor = 'var(--color-primary)';
+      option.style.background = 'rgba(var(--color-teal-500-rgb), 0.05)';
+      const input = option.querySelector('input[type="radio"]');
+      if (input) input.checked = true;
+    });
+  };
+
+  document.getElementById('fx-preset')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    if (value === 'custom') {
+      updateSettings({ presetFx: 'custom' });
+    } else {
+      applyPreset(value);
+    }
+    refreshAccountSettingsView();
+    highlightSelectedAccountType(value);
+  });
+
+  document.getElementById('gold-preset')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    if (value === 'custom') {
+      updateSettings({ presetGold: 'custom' });
+    } else {
+      applyPreset(value);
+    }
+    refreshAccountSettingsView();
+  });
+
+  const numberInputsMap = {
+    'usd-jpy-rate': 'usdJpyRate',
+    'fx-lot-size': 'fxLotSize',
+    'fx-pip-size-jpy': 'fxPipSizeJpy',
+    'fx-pip-size-usd': 'fxPipSizeUsd',
+    'gold-lot-size': 'goldLotSize',
+    'gold-pip-size': 'goldPipSize'
+  };
+
+  Object.entries(numberInputsMap).forEach(([id, key]) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const value = parseFloat(input.value);
+      updateSettings({ [key]: value });
+      refreshAccountSettingsView();
+    });
+  });
+
+  document.getElementById('reset-account-settings')?.addEventListener('click', () => {
+    if (confirm('設定をデフォルトに戻しますか？')) {
+      resetSettings();
+      refreshAccountSettingsView();
+      highlightSelectedAccountType(getSettings().presetFx);
+    }
+  });
+
+  highlightSelectedAccountType(getSettings().presetFx);
+
   document.getElementById('calculate-btn').addEventListener('click', calculateLot);
 
-  // 口座タイプ選択のイベントリスナー
   document.querySelectorAll('input[name="account-type"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       const value = e.target.value;
       const currentSetting = document.getElementById('current-setting');
       const manualInput = document.getElementById('manual-input');
       const pipValueInput = document.getElementById('pip-value');
-      
-      // 選択されたオプションをハイライト
+      const lotSizeDisplay = document.getElementById('lot-size-display');
+      const pipValueDisplay = document.getElementById('pip-value-display');
+
       document.querySelectorAll('.account-type-option').forEach(option => {
         option.style.borderColor = 'var(--color-border)';
         option.style.background = 'transparent';
       });
       e.target.closest('.account-type-option').style.borderColor = 'var(--color-primary)';
       e.target.closest('.account-type-option').style.background = 'rgba(var(--color-teal-500-rgb), 0.05)';
-      
+
       if (value === 'custom') {
         currentSetting.style.display = 'none';
         manualInput.style.display = 'block';
       } else {
-        const pipValue = parseInt(value, 10) / 100;
+        let pipValue = getDerivedSettings().fxJpy.pipValuePerLot;
+        let lotSize = getSettings().fxLotSize;
+        applyPreset(value);
+        const refreshed = getDerivedSettings();
+        pipValue = refreshed.fxJpy.pipValuePerLot;
+        lotSize = refreshed.settings.fxLotSize;
+        refreshAccountSettingsView();
+
         if (pipValueInput) {
-          pipValueInput.value = pipValue;
+          pipValueInput.value = Math.round(pipValue);
         }
-        
-        // 設定表示を更新
-        const lotSizeDisplay = document.getElementById('lot-size-display');
-        const pipValueDisplay = document.getElementById('pip-value-display');
-        const pipValueDisplay2 = document.getElementById('pip-value-display-2');
-        if (lotSizeDisplay) lotSizeDisplay.textContent = parseInt(value, 10).toLocaleString() + '通貨';
-        if (pipValueDisplay) pipValueDisplay.textContent = pipValue + '円';
-        if (pipValueDisplay2) pipValueDisplay2.textContent = pipValue + '円';
-        
+
+        if (lotSizeDisplay) lotSizeDisplay.textContent = Math.round(lotSize).toLocaleString() + '通貨';
+        if (pipValueDisplay) pipValueDisplay.textContent = Math.round(pipValue).toLocaleString() + '円';
+
         currentSetting.style.display = 'block';
         manualInput.style.display = 'none';
       }
@@ -156,18 +333,15 @@ function calculateLot() {
   const stopLossPips = parseFloat(document.getElementById('stop-loss-pips').value);
   const pipValue = parseFloat(document.getElementById('pip-value').value);
 
-  // バリデーション
   if (!balance || !riskPct || !stopLossPips || !pipValue) {
     alert('すべての項目を入力してください');
     return;
   }
 
-  // 計算
   const riskAmount = balance * (riskPct / 100);
   const recommendedLot = riskAmount / (stopLossPips * pipValue);
   const lossAmount = recommendedLot * stopLossPips * pipValue;
 
-  // 結果表示
   document.getElementById('risk-amount').textContent = 
     riskAmount.toLocaleString() + '円';
   document.getElementById('recommended-lot').textContent = 

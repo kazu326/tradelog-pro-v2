@@ -19,6 +19,28 @@ export const REQUIRED_TRADE_KEYS = [
   'created_at','pair','direction','entry_price','exit_price','lot_size','pips','pnl'
 ];
 
+const PAIR_ALIASES = new Map([
+  ['XAUUSD', 'XAU/USD'],
+  ['XAU/USD', 'XAU/USD'],
+  ['GOLDUSD', 'XAU/USD'],
+  ['GOLD/USD', 'XAU/USD'],
+  ['GOLDXAU', 'XAU/USD'],
+  ['XAUUS', 'XAU/USD'] // 一部業者表記対応
+]);
+
+export function normalizePairSymbol(value) {
+  if (!value) return '';
+  const upper = String(value).toUpperCase().trim();
+  const compact = upper.replace(/\s+/g, '');
+  if (PAIR_ALIASES.has(compact)) {
+    return PAIR_ALIASES.get(compact);
+  }
+  if (PAIR_ALIASES.has(upper)) {
+    return PAIR_ALIASES.get(upper);
+  }
+  return upper;
+}
+
 /**
  * レコード型ガード + 正規化
  * @param {any} raw
@@ -32,7 +54,7 @@ export function validateAndNormalizeTrade(raw) {
     if (direction !== 'buy' && direction !== 'sell') return { ok:false, error:'direction は buy/sell' };
     const normalized = {
       created_at: new Date(raw.created_at).toISOString(),
-      pair: String(raw.pair).toUpperCase().replace(/\s+/g,''),
+      pair: normalizePairSymbol(raw.pair),
       direction,
       entry_price: Number(raw.entry_price),
       exit_price: Number(raw.exit_price),

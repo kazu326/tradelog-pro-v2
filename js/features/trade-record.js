@@ -4,8 +4,11 @@
 import { saveTrade, getTrades, deleteTrade } from '../core/storage.js';
 import { calculateStats } from '../core/analytics.js';
 import { showToast } from '../ui/toast.js';
+import { getDerivedSettings, onSettingsChange } from '../core/settings.js';
+import { normalizePairSymbol as normalizePair } from '../core/types.js';
 
 let allTrades = [];
+let derivedSettings = getDerivedSettings();
 
 /**
  * トレード記録タブを初期化
@@ -50,6 +53,9 @@ export async function initTradeRecord(container) {
                 <option value="AUD/JPY">AUD/JPY</option>
                 <option value="EUR/USD">EUR/USD</option>
                 <option value="GBP/USD">GBP/USD</option>
+                <option value="XAU/USD">XAU/USD（GOLD）</option>
+                <option value="GOLD/USD">GOLD/USD</option>
+                <option value="XAUUSD">XAUUSD</option>
               </select>
             </div>
 
@@ -143,6 +149,12 @@ export async function initTradeRecord(container) {
   // フォーム送信
   document.getElementById('trade-form').addEventListener('submit', handleTradeSubmit);
 
+  // 設定変更の購読（ロット/ピップ計算に反映）
+  onSettingsChange((_, nextDerived) => {
+    derivedSettings = nextDerived;
+    calculateTradeValues(); // 値を再計算
+  });
+
   // 自動計算の初期化
   setupAutoCalculation();
   setupQuickButtons();
@@ -160,7 +172,7 @@ async function handleTradeSubmit(e) {
 
   const formData = new FormData(e.target);
   const tradeData = {
-    pair: formData.get('pair'),
+    pair: normalizePair(formData.get('pair')),
     direction: formData.get('direction'),
     lot_size: parseFloat(formData.get('lot_size')),
     entry_price: parseFloat(formData.get('entry_price')),
@@ -290,31 +302,28 @@ function calculateTradeValues() {
     return;
   }
 
+  const normalizedPair = normalizePair(pair);
+
   // Pips計算
   let pips = 0;
-  let pipMultiplier = 1;
+  let pipMultiplier = 100;
+  let pipValuePerLot = 1000;
 
-  if (pair.includes('JPY')) {
-    pipMultiplier = 100;
+  if (normalizedPair.includes('JPY')) {
+    pipMultiplier = derivedSettings.fxJpy.pipMultiplier;
+    pipValuePerLot = derivedSettings.fxJpy.pipValuePerLot;
+  } else if (normalizedPair === 'XAU/USD') {
+    pipMultiplier = derivedSettings.gold.pipMultiplier;
+    pipValuePerLot = derivedSettings.gold.pipValuePerLot;
   } else {
-    pipMultiplier = 10000;
+    pipMultiplier = derivedSettings.fxUsd.pipMultiplier;
+    pipValuePerLot = derivedSettings.fxUsd.pipValuePerLot;
   }
 
   if (direction === '買い') {
     pips = (exit - entry) * pipMultiplier;
   } else {
     pips = (entry - exit) * pipMultiplier;
-  }
-
-  // 1ロット・1pipsあたりの損益（円）
-  // 海外FX標準: 100,000通貨 → 1pips = 1000円
-  // 国内FX: 10,000通貨 → 1pips = 100円
-  // ※ここはデフォルトで海外FX標準（1000円）を想定
-  let pipValuePerLot = 1000;
-
-  if (pair === 'EUR/USD' || pair === 'GBP/USD') {
-    // クロス通貨の場合（1USD = 150円として概算）
-    pipValuePerLot = 1500;
   }
 
   // 損益計算
@@ -328,13 +337,13 @@ function calculateTradeValues() {
   if (pnlInput) pnlInput.value = pnl.toFixed(0);
 
   // プレビュー表示
-  updateCalculationPreview(pips, pnl);
+  updateCalculationPreview(pips, pnl, pipMultiplier, pipValuePerLot);
 }
 
 /**
  * 計算プレビュー更新
  */
-function updateCalculationPreview(pips, pnl) {
+function updateCalculationPreview(pips, pnl, pipMultiplier, pipValuePerLot) {
   const preview = document.getElementById('calculation-preview');
   if (!preview) return;
   
@@ -348,6 +357,19 @@ function updateCalculationPreview(pips, pnl) {
   if (previewPnl) {
     previewPnl.textContent = (pnl > 0 ? '+' : '') + pnl.toLocaleString() + '円';
     previewPnl.style.color = pnl > 0 ? 'var(--color-success)' : 'var(--color-error)';
+  }
+
+  const previewMeta = preview.querySelector('.preview-meta');
+  if (!previewMeta) {
+    const meta = document.createElement('div');
+    meta.className = 'preview-meta';
+    meta.style.fontSize = '12px';
+    meta.style.color = 'var(--color-text-secondary)';
+    meta.style.marginTop = '4px';
+    meta.textContent = `1ロットあたり1pips = 約${Math.round(pipValuePerLot).toLocaleString()}円 (${pipMultiplier.toFixed(0)}倍計算)`;
+    preview.appendChild(meta);
+  } else {
+    previewMeta.textContent = `1ロットあたり1pips = 約${Math.round(pipValuePerLot).toLocaleString()}円 (${pipMultiplier.toFixed(0)}倍計算)`;
   }
 
   // 勝率への影響
