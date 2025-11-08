@@ -248,9 +248,15 @@
 
 .ai-panel-hero {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: var(--space-lg);
   align-items: center;
+}
+
+.ai-panel-hero__level {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ai-panel-hero__avatar {
@@ -283,7 +289,6 @@
   display: flex;
   gap: var(--space-md);
   align-items: flex-start;
-  margin-bottom: var(--space-md);
 }
 
 .ai-progress__level {
@@ -309,6 +314,19 @@
   font-size: 26px;
   font-weight: 700;
   line-height: 1;
+}
+
+.ai-progress__level--tier0,
+.ai-progress__level--tier1,
+.ai-progress__level--tier2,
+.ai-progress__level--tier3,
+.ai-progress__level--tier4,
+.ai-progress__level--tier5,
+.ai-progress__level--tier6,
+.ai-progress__level--tier7,
+.ai-progress__level--tier8,
+.ai-progress__level--tier9 {
+  /* Tier-specific colors can be customized later */
 }
 
 .ai-progress__details {
@@ -374,6 +392,15 @@
   .ai-panel-hero {
     grid-template-columns: 1fr;
     text-align: center;
+    gap: var(--space-md);
+  }
+
+  .ai-panel-hero__level {
+    justify-content: center;
+  }
+
+  .ai-progress {
+    justify-content: center;
   }
 
   .ai-panel-hero__avatar {

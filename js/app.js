@@ -17,10 +17,7 @@ let aiPanelOpen = false;
 
 const AI_PANEL_CONTENT_HTML = `
   <div class="ai-panel-hero">
-    <div class="ai-panel-hero__avatar">
-      <img src="images/ai-panel-hero__avatar-placeholder.svg" alt="AIキャラクター" />
-    </div>
-    <div class="ai-panel-hero__copy">
+    <div class="ai-panel-hero__level">
       <div class="ai-progress">
         <div class="ai-progress__level">
           <span class="ai-progress__label">Lv</span>
@@ -33,6 +30,11 @@ const AI_PANEL_CONTENT_HTML = `
           <div class="ai-progress__next">次のレベルまで <span id="ai-progress-remaining">0</span> pt</div>
         </div>
       </div>
+    </div>
+    <div class="ai-panel-hero__avatar">
+      <img src="images/ai-panel-hero__avatar-placeholder.svg" alt="AIキャラクター" />
+    </div>
+    <div class="ai-panel-hero__copy">
       <h3>AIがトレードを瞬時に診断</h3>
       <p>
         最新モデルが勝率・リスク・改善ポイントを抽出。<br>
