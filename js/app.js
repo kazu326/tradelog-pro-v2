@@ -164,6 +164,12 @@ function showLoginScreen() {
           <button id="magic-link-btn" class="btn-primary">
             マジックリンクを送信
           </button>
+          <div class="login-divider">
+            <span>または</span>
+          </div>
+          <button id="google-login-btn" class="btn-secondary">
+            Googleでログイン
+          </button>
           <p class="help-text">
             メールアドレスに届くリンクをクリックしてログイン
           </p>
@@ -174,6 +180,7 @@ function showLoginScreen() {
   
   // イベントリスナー
   document.getElementById('magic-link-btn').addEventListener('click', sendMagicLink);
+  document.getElementById('google-login-btn').addEventListener('click', signInWithGoogle);
 }
 
 /**
@@ -207,6 +214,41 @@ async function sendMagicLink() {
     alert('エラーが発生しました: ' + error.message);
     btn.disabled = false;
     btn.textContent = 'マジックリンクを送信';
+  }
+}
+
+/**
+ * Googleでログイン
+ */
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-login-btn');
+  
+  if (!btn) return;
+  
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Googleにリダイレクト中...';
+  
+  try {
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account'
+        }
+      }
+    });
+    
+    if (error) throw error;
+    // 正常時はSupabase側でリダイレクトが発生する
+  } catch (error) {
+    console.error('Error signing in with Google:', error);
+    alert('Googleログインでエラーが発生しました: ' + error.message);
+    btn.disabled = false;
+    btn.textContent = originalLabel;
   }
 }
 
