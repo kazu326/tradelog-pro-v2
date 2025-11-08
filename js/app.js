@@ -3,7 +3,7 @@
  */
 import { supabaseClient, getCurrentUser, getUserProfile, onAuthStateChange, signOut } from './core/supabase-client.js';
 import { initTradeRecord } from './features/trade-record.js';
-import { initLotCalculator } from './features/lot-calculator.js';
+import { initLotCalculator, initAccountSettings } from './features/lot-calculator.js';
 import { initAIAnalysis } from './features/ai-analysis.js';
 import { initAnalytics } from './features/analytics/index.js';
 import { showToast } from './ui/toast.js';
@@ -545,7 +545,7 @@ async function loadTabContent(tabName) {
       await initLotCalculator(container);
     } else if (tabName === 'settings') {
       console.log('⚙️ 設定タブを初期化中...');
-      initLotCalculator(container);
+    initAccountSettings(container);
     }
     
     console.log(`✅ タブコンテンツ読み込み完了: ${tabName}`);
