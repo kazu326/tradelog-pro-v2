@@ -12,6 +12,131 @@ import { showToast } from './ui/toast.js';
 let currentUser = null;
 let userProfile = null;
 let currentTab = 'record';
+let aiPanelOpen = false;
+
+const AI_PANEL_CONTENT_HTML = `
+  <div class="ai-analysis-hero">
+    <h2>🤖 AI分析アシスタント</h2>
+    <p class="hero-description">
+      あなたのトレードデータを最先端AIが分析。<br>
+      プロトレーダー級のアドバイスを即座に取得できます。
+    </p>
+  </div>
+  
+  <div class="ai-analysis-main-section">
+    <h3>✨ 分析を開始</h3>
+    <p class="section-description">
+      ボタンをクリックすると、詳細な分析プロンプトが自動生成され、<br>
+      クリップボードにコピーされます。AIチャットに貼り付けるだけ！
+    </p>
+    
+    <div class="ai-provider-grid">
+      <button class="btn btn--primary ai-provider-card" data-provider="chatgpt">
+        <span class="provider-icon">💬</span>
+        <div class="provider-info">
+          <strong>ChatGPT</strong>
+          <small>GPT-4で詳細分析</small>
+        </div>
+      </button>
+      
+      <button class="btn btn--primary ai-provider-card" data-provider="claude">
+        <span class="provider-icon">🧠</span>
+        <div class="provider-info">
+          <strong>Claude</strong>
+          <small>Anthropicの最新AI</small>
+        </div>
+      </button>
+      
+      <button class="btn btn--primary ai-provider-card" data-provider="gemini">
+        <span class="provider-icon">✨</span>
+        <div class="provider-info">
+          <strong>Gemini</strong>
+          <small>Googleの次世代AI</small>
+        </div>
+      </button>
+    </div>
+    
+    <div class="ai-options-card">
+      <h4>📋 分析オプション</h4>
+      <div class="options-grid">
+        <label class="option-item">
+          <input type="checkbox" id="includeNotes" checked>
+          <div class="option-content">
+            <strong>メモ・感情分析</strong>
+            <small>トレード時のメモから心理状態を分析</small>
+          </div>
+        </label>
+        
+        <label class="option-item">
+          <input type="checkbox" id="includePairAnalysis" checked>
+          <div class="option-content">
+            <strong>通貨ペア別分析</strong>
+            <small>各通貨ペアの得意/不得意を特定</small>
+          </div>
+        </label>
+        
+        <label class="option-item">
+          <input type="checkbox" id="includeTimeAnalysis">
+          <div class="option-content">
+            <strong>時間帯別分析</strong>
+            <small>東京/ロンドン/NY時間のパフォーマンス比較</small>
+          </div>
+        </label>
+        
+        <label class="option-item">
+          <input type="checkbox" id="includeRiskAnalysis" checked>
+          <div class="option-content">
+            <strong>リスク管理分析</strong>
+            <small>ロットサイズ・損切り設定の適切性評価</small>
+          </div>
+        </label>
+        
+        <label class="option-item">
+          <input type="checkbox" id="includeGoals">
+          <div class="option-content">
+            <strong>目標設定支援</strong>
+            <small>具体的な月間目標と行動計画を提案</small>
+          </div>
+        </label>
+      </div>
+    </div>
+    
+    <div class="help-card">
+      <h4>💡 使い方</h4>
+      <ol class="step-list">
+        <li>分析したい項目をチェック</li>
+        <li>使いたいAIのボタンをクリック</li>
+        <li>AIチャットが開いたら <kbd>Ctrl+V</kbd> で貼り付け</li>
+        <li>送信して詳細な分析結果を受け取る</li>
+      </ol>
+      
+      <div class="tip-box">
+        <strong>💡 Tip:</strong> トレードデータが多いほど、AIの分析精度が向上します。
+        最低10件以上のトレード記録を推奨します。
+      </div>
+    </div>
+  </div>
+  
+  <div class="ai-sample-section">
+    <h3>📝 生成されるプロンプト例</h3>
+    <div class="sample-prompt-container">
+      <pre class="prompt-preview"><code># FXトレード分析依頼
+
+あなたはプロのFXトレーダー兼コーチです。
+以下の私のトレードデータを分析し、具体的な改善提案をお願いします。
+
+## 📊 基本統計
+- 総トレード数: 25件
+- 勝率: 64.0%
+- 総損益: +45,230円
+- プロフィットファクター: 2.15
+...（続く）</code></pre>
+    </div>
+    <p class="sample-note">
+      ※ 実際のプロンプトは、あなたのトレードデータに基づいて自動生成されます。
+    </p>
+  </div>
+`;
 
 // マジックリンク認証のトークン処理
 
@@ -259,148 +384,33 @@ function showMainApp() {
   document.body.innerHTML = `
     <div class="app-container">
       <header class="app-header">
-        <h1>TradeLog Pro</h1>
-        <div class="user-info">
-          <span>${currentUser.email}</span>
-          <span class="plan-badge">${userProfile.plan}</span>
-          <button id="logout-btn">ログアウト</button>
+        <div class="app-header__top">
+          <h1>TradeLog Pro</h1>
+          <button id="open-ai-panel-btn" class="ai-launch-btn">
+            <span class="ai-launch-btn__icon">🤖</span>
+            <span class="ai-launch-btn__text">AI分析アシスタントを開く</span>
+          </button>
+          <div class="user-info">
+            <span>${currentUser.email}</span>
+            <span class="plan-badge">${userProfile.plan}</span>
+            <button id="logout-btn">ログアウト</button>
+          </div>
         </div>
+        <div id="ai-panel-container"></div>
       </header>
       
       <main class="app-main">
         <div class="tabs">
           <button class="tab-btn active" data-tab="record">記録</button>
           <button class="tab-btn" data-tab="analytics">📊 分析</button>
-          <button class="tab-btn tab-btn--highlight" data-tab="ai-analysis">🤖 AI分析</button>
+          <button class="tab-btn" data-tab="lot">ロット計算</button>
           <button class="tab-btn" data-tab="settings">設定</button>
         </div>
         
         <div class="tab-content">
           <div id="tab-record" class="tab-pane active"></div>
           <div id="tab-analytics" class="tab-pane"></div>
-          <div id="tab-ai-analysis" class="tab-pane">
-            <div class="ai-analysis-hero">
-              <h2>🤖 AI分析アシスタント</h2>
-              <p class="hero-description">
-                あなたのトレードデータを最先端AIが分析。<br>
-                プロトレーダー級のアドバイスを即座に取得できます。
-              </p>
-            </div>
-            
-            <div class="ai-analysis-main-section">
-              <h3>✨ 分析を開始</h3>
-              <p class="section-description">
-                ボタンをクリックすると、詳細な分析プロンプトが自動生成され、<br>
-                クリップボードにコピーされます。AIチャットに貼り付けるだけ！
-              </p>
-              
-              <div class="ai-provider-grid">
-                <button class="btn btn--primary ai-provider-card" data-provider="chatgpt">
-                  <span class="provider-icon">💬</span>
-                  <div class="provider-info">
-                    <strong>ChatGPT</strong>
-                    <small>GPT-4で詳細分析</small>
-                  </div>
-                </button>
-                
-                <button class="btn btn--primary ai-provider-card" data-provider="claude">
-                  <span class="provider-icon">🧠</span>
-                  <div class="provider-info">
-                    <strong>Claude</strong>
-                    <small>Anthropicの最新AI</small>
-                  </div>
-                </button>
-                
-                <button class="btn btn--primary ai-provider-card" data-provider="gemini">
-                  <span class="provider-icon">✨</span>
-                  <div class="provider-info">
-                    <strong>Gemini</strong>
-                    <small>Googleの次世代AI</small>
-                  </div>
-                </button>
-              </div>
-              
-              <div class="ai-options-card">
-                <h4>📋 分析オプション</h4>
-                <div class="options-grid">
-                  <label class="option-item">
-                    <input type="checkbox" id="includeNotes" checked>
-                    <div class="option-content">
-                      <strong>メモ・感情分析</strong>
-                      <small>トレード時のメモから心理状態を分析</small>
-                    </div>
-                  </label>
-                  
-                  <label class="option-item">
-                    <input type="checkbox" id="includePairAnalysis" checked>
-                    <div class="option-content">
-                      <strong>通貨ペア別分析</strong>
-                      <small>各通貨ペアの得意/不得意を特定</small>
-                    </div>
-                  </label>
-                  
-                  <label class="option-item">
-                    <input type="checkbox" id="includeTimeAnalysis">
-                    <div class="option-content">
-                      <strong>時間帯別分析</strong>
-                      <small>東京/ロンドン/NY時間のパフォーマンス比較</small>
-                    </div>
-                  </label>
-                  
-                  <label class="option-item">
-                    <input type="checkbox" id="includeRiskAnalysis" checked>
-                    <div class="option-content">
-                      <strong>リスク管理分析</strong>
-                      <small>ロットサイズ・損切り設定の適切性評価</small>
-                    </div>
-                  </label>
-                  
-                  <label class="option-item">
-                    <input type="checkbox" id="includeGoals">
-                    <div class="option-content">
-                      <strong>目標設定支援</strong>
-                      <small>具体的な月間目標と行動計画を提案</small>
-                    </div>
-                  </label>
-                </div>
-              </div>
-              
-              <div class="help-card">
-                <h4>💡 使い方</h4>
-                <ol class="step-list">
-                  <li>分析したい項目をチェック</li>
-                  <li>使いたいAIのボタンをクリック</li>
-                  <li>AIチャットが開いたら <kbd>Ctrl+V</kbd> で貼り付け</li>
-                  <li>送信して詳細な分析結果を受け取る</li>
-                </ol>
-                
-                <div class="tip-box">
-                  <strong>💡 Tip:</strong> トレードデータが多いほど、AIの分析精度が向上します。
-                  最低10件以上のトレード記録を推奨します。
-                </div>
-              </div>
-            </div>
-            
-            <div class="ai-sample-section">
-              <h3>📝 生成されるプロンプト例</h3>
-              <div class="sample-prompt-container">
-                <pre class="prompt-preview"><code># FXトレード分析依頼
-
-あなたはプロのFXトレーダー兼コーチです。
-以下の私のトレードデータを分析し、具体的な改善提案をお願いします。
-
-## 📊 基本統計
-- 総トレード数: 25件
-- 勝率: 64.0%
-- 総損益: +45,230円
-- プロフィットファクター: 2.15
-...（続く）</code></pre>
-              </div>
-              <p class="sample-note">
-                ※ 実際のプロンプトは、あなたのトレードデータに基づいて自動生成されます。
-              </p>
-            </div>
-          </div>
+          <div id="tab-lot" class="tab-pane"></div>
           <div id="tab-settings" class="tab-pane">
             <h2>設定</h2>
             <p>Day 4で実装予定...</p>
@@ -414,6 +424,9 @@ function showMainApp() {
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut();
   });
+  document.getElementById('open-ai-panel-btn').addEventListener('click', toggleAiPanel);
+  ensureAiPanel();
+  setAiPanelOpen(false);
   
   // タブ切替
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -498,9 +511,9 @@ async function loadTabContent(tabName) {
     } else if (tabName === 'analytics') {
       console.log('📊 分析タブを初期化中...');
       await initAnalytics(container);
-    } else if (tabName === 'ai-analysis') {
-      console.log('🤖 AI分析タブを初期化中...');
-      await initAIAnalysis(container);
+    } else if (tabName === 'lot') {
+      console.log('🧮 ロット計算タブを初期化中...');
+      await initLotCalculator(container);
     } else if (tabName === 'settings') {
       console.log('⚙️ 設定タブを初期化中...');
       initLotCalculator(container);
@@ -519,4 +532,42 @@ window.app = {
   currentUser: () => currentUser,
   userProfile: () => userProfile
 };
+
+function ensureAiPanel() {
+  const container = document.getElementById('ai-panel-container');
+  if (!container || container.dataset.initialized === '1') return;
+  container.innerHTML = `
+    <div class="ai-panel" id="ai-panel" aria-hidden="true">
+      <div class="ai-panel__header">
+        <h2>AI分析アシスタント</h2>
+        <button class="ai-panel__close" id="close-ai-panel-btn" aria-label="閉じる">✕</button>
+      </div>
+      <div class="ai-panel__content" id="ai-panel-content">${AI_PANEL_CONTENT_HTML}</div>
+    </div>
+  `;
+  container.dataset.initialized = '1';
+  const content = document.getElementById('ai-panel-content');
+  if (content) {
+    initAIAnalysis(content);
+  }
+  document.getElementById('close-ai-panel-btn')?.addEventListener('click', () => setAiPanelOpen(false));
+}
+
+function toggleAiPanel() {
+  ensureAiPanel();
+  setAiPanelOpen(!aiPanelOpen);
+}
+
+function setAiPanelOpen(isOpen) {
+  aiPanelOpen = isOpen;
+  const panel = document.getElementById('ai-panel');
+  if (!panel) return;
+  if (isOpen) {
+    panel.classList.add('ai-panel--open');
+    panel.setAttribute('aria-hidden', 'false');
+  } else {
+    panel.classList.remove('ai-panel--open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+}
 
