@@ -386,7 +386,7 @@ function showMainApp() {
       <header class="app-header">
         <div class="app-header__top">
           <h1>TradeLog Pro</h1>
-          <button id="open-ai-panel-btn" class="ai-launch-btn">
+          <button class="ai-launch-btn" data-action="open-ai-panel">
             <span class="ai-launch-btn__icon">🤖</span>
             <span class="ai-launch-btn__text">AI分析アシスタントを開く</span>
           </button>
@@ -400,6 +400,29 @@ function showMainApp() {
       </header>
       
       <main class="app-main">
+        <section class="ai-hero">
+          <div class="ai-hero__copy">
+            <span class="ai-hero__badge">NEW • AIアシスト</span>
+            <h2 class="ai-hero__title">AIがあなたのトレードを即時診断</h2>
+            <p class="ai-hero__text">
+              ワンクリックで勝率・リスク・改善案を自動生成。<br>
+              データに基づいたコーチングで、次のトレードを確実に。
+            </p>
+            <div class="ai-hero__actions">
+              <button class="btn-primary ai-hero__cta" data-action="open-ai-panel">AI分析を開始する</button>
+              <div class="ai-hero__stats">
+                <span>今月の分析回数 <strong id="ai-analysis-count">0</strong> 回</span>
+                <span>最新エンジン <strong>GPT-4</strong></span>
+              </div>
+            </div>
+          </div>
+          <div class="ai-hero__media">
+            <div class="ai-hero__media-placeholder">
+              <span>ここにキャラクター/GIFを配置できます</span>
+            </div>
+          </div>
+        </section>
+
         <div class="tabs">
           <button class="tab-btn active" data-tab="record">記録</button>
           <button class="tab-btn" data-tab="analytics">📊 分析</button>
@@ -424,7 +447,12 @@ function showMainApp() {
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut();
   });
-  document.getElementById('open-ai-panel-btn').addEventListener('click', toggleAiPanel);
+  document.querySelectorAll('[data-action="open-ai-panel"]').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleAiPanel();
+    });
+  });
   ensureAiPanel();
   setAiPanelOpen(false);
   
@@ -537,9 +565,13 @@ function ensureAiPanel() {
   const container = document.getElementById('ai-panel-container');
   if (!container || container.dataset.initialized === '1') return;
   container.innerHTML = `
+    <div class="ai-panel-overlay" id="ai-panel-overlay"></div>
     <div class="ai-panel" id="ai-panel" aria-hidden="true">
       <div class="ai-panel__header">
-        <h2>AI分析アシスタント</h2>
+        <div>
+          <span class="ai-panel__badge">AIアシスタント</span>
+          <h2>高度分析モード</h2>
+        </div>
         <button class="ai-panel__close" id="close-ai-panel-btn" aria-label="閉じる">✕</button>
       </div>
       <div class="ai-panel__content" id="ai-panel-content">${AI_PANEL_CONTENT_HTML}</div>
@@ -551,6 +583,7 @@ function ensureAiPanel() {
     initAIAnalysis(content);
   }
   document.getElementById('close-ai-panel-btn')?.addEventListener('click', () => setAiPanelOpen(false));
+  document.getElementById('ai-panel-overlay')?.addEventListener('click', () => setAiPanelOpen(false));
 }
 
 function toggleAiPanel() {
@@ -561,13 +594,18 @@ function toggleAiPanel() {
 function setAiPanelOpen(isOpen) {
   aiPanelOpen = isOpen;
   const panel = document.getElementById('ai-panel');
-  if (!panel) return;
+  const overlay = document.getElementById('ai-panel-overlay');
+  if (!panel || !overlay) return;
   if (isOpen) {
     panel.classList.add('ai-panel--open');
+    overlay.classList.add('ai-panel-overlay--visible');
     panel.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ai-panel-open');
   } else {
     panel.classList.remove('ai-panel--open');
+    overlay.classList.remove('ai-panel-overlay--visible');
     panel.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ai-panel-open');
   }
 }
 
