@@ -4,6 +4,7 @@
 import { getTrades } from '../core/storage.js';
 import { calculateStats, calculateDrawdown, getStatsByPair } from '../core/analytics.js';
 import { showToast } from '../ui/toast.js';
+import { addProgress, refreshProgressUI } from '../core/progression.js';
 
 /**
  * AI分析アシスタント初期化
@@ -331,6 +332,10 @@ async function handleAIAnalysis(provider) {
     promptDisplay.appendChild(buttonContainer);
     
     document.body.appendChild(promptDisplay);
+    
+    // 進捗ポイントを加算
+    addProgress('ai_analysis');
+    refreshProgressUI();
     
     // 自動でコピーを試みる
     try {

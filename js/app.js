@@ -7,6 +7,7 @@ import { initLotCalculator } from './features/lot-calculator.js';
 import { initAIAnalysis } from './features/ai-analysis.js';
 import { initAnalytics } from './features/analytics/index.js';
 import { showToast } from './ui/toast.js';
+import { refreshProgressUI, listenProgressUpdates } from './core/progression.js';
 
 // グローバル状態
 let currentUser = null;
@@ -15,14 +16,31 @@ let currentTab = 'record';
 let aiPanelOpen = false;
 
 const AI_PANEL_CONTENT_HTML = `
-  <div class="ai-analysis-hero">
-    <h2>🤖 AI分析アシスタント</h2>
-    <p class="hero-description">
-      あなたのトレードデータを最先端AIが分析。<br>
-      プロトレーダー級のアドバイスを即座に取得できます。
-    </p>
+  <div class="ai-panel-hero">
+    <div class="ai-panel-hero__avatar">
+      <img src="images/ai-panel-hero__avatar-placeholder.svg" alt="AIキャラクター" />
+    </div>
+    <div class="ai-panel-hero__copy">
+      <div class="ai-progress">
+        <div class="ai-progress__level">
+          <span class="ai-progress__label">Lv</span>
+          <span class="ai-progress__value" id="ai-progress-level">1</span>
+        </div>
+        <div class="ai-progress__details">
+          <div class="ai-progress__meter">
+            <div class="ai-progress__meter-bar" id="ai-progress-meter"></div>
+          </div>
+          <div class="ai-progress__next">次のレベルまで <span id="ai-progress-remaining">0</span> pt</div>
+        </div>
+      </div>
+      <h3>AIがトレードを瞬時に診断</h3>
+      <p>
+        最新モデルが勝率・リスク・改善ポイントを抽出。<br>
+        具体的なアクションプランで次のトレードを後押しします。
+      </p>
+    </div>
   </div>
-  
+
   <div class="ai-analysis-main-section">
     <h3>✨ 分析を開始</h3>
     <p class="section-description">
@@ -384,45 +402,24 @@ function showMainApp() {
   document.body.innerHTML = `
     <div class="app-container">
       <header class="app-header">
-        <div class="app-header__top">
+        <div class="app-header__row">
           <h1>TradeLog Pro</h1>
-          <button class="ai-launch-btn" data-action="open-ai-panel">
-            <span class="ai-launch-btn__icon">🤖</span>
-            <span class="ai-launch-btn__text">AI分析アシスタントを開く</span>
-          </button>
           <div class="user-info">
             <span>${currentUser.email}</span>
             <span class="plan-badge">${userProfile.plan}</span>
             <button id="logout-btn">ログアウト</button>
           </div>
         </div>
+        <button class="ai-launch-btn" data-action="open-ai-panel">
+          <span class="ai-launch-btn__icon-slot">
+            <img src="images/ai-launch-btn__icon-slot.svg" alt="AIキャラクター" />
+          </span>
+          <span class="ai-launch-btn__text">AI分析アシスタントを開く</span>
+        </button>
         <div id="ai-panel-container"></div>
       </header>
       
       <main class="app-main">
-        <section class="ai-hero">
-          <div class="ai-hero__copy">
-            <span class="ai-hero__badge">NEW • AIアシスト</span>
-            <h2 class="ai-hero__title">AIがあなたのトレードを即時診断</h2>
-            <p class="ai-hero__text">
-              ワンクリックで勝率・リスク・改善案を自動生成。<br>
-              データに基づいたコーチングで、次のトレードを確実に。
-            </p>
-            <div class="ai-hero__actions">
-              <button class="btn-primary ai-hero__cta" data-action="open-ai-panel">AI分析を開始する</button>
-              <div class="ai-hero__stats">
-                <span>今月の分析回数 <strong id="ai-analysis-count">0</strong> 回</span>
-                <span>最新エンジン <strong>GPT-4</strong></span>
-              </div>
-            </div>
-          </div>
-          <div class="ai-hero__media">
-            <div class="ai-hero__media-placeholder">
-              <span>ここにキャラクター/GIFを配置できます</span>
-            </div>
-          </div>
-        </section>
-
         <div class="tabs">
           <button class="tab-btn active" data-tab="record">記録</button>
           <button class="tab-btn" data-tab="analytics">📊 分析</button>
@@ -455,6 +452,8 @@ function showMainApp() {
   });
   ensureAiPanel();
   setAiPanelOpen(false);
+  listenProgressUpdates();
+  refreshProgressUI();
   
   // タブ切替
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -581,6 +580,7 @@ function ensureAiPanel() {
   const content = document.getElementById('ai-panel-content');
   if (content) {
     initAIAnalysis(content);
+    refreshProgressUI(content);
   }
   document.getElementById('close-ai-panel-btn')?.addEventListener('click', () => setAiPanelOpen(false));
   document.getElementById('ai-panel-overlay')?.addEventListener('click', () => setAiPanelOpen(false));
@@ -601,6 +601,7 @@ function setAiPanelOpen(isOpen) {
     overlay.classList.add('ai-panel-overlay--visible');
     panel.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ai-panel-open');
+    refreshProgressUI();
   } else {
     panel.classList.remove('ai-panel--open');
     overlay.classList.remove('ai-panel-overlay--visible');

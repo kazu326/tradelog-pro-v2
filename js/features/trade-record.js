@@ -6,6 +6,7 @@ import { calculateStats } from '../core/analytics.js';
 import { showToast } from '../ui/toast.js';
 import { getDerivedSettings, onSettingsChange } from '../core/settings.js';
 import { normalizePairSymbol as normalizePair } from '../core/types.js';
+import { addProgress, refreshProgressUI } from '../core/progression.js';
 
 let allTrades = [];
 let derivedSettings = getDerivedSettings();
@@ -205,6 +206,8 @@ async function handleTradeSubmit(e) {
 
   try {
     await saveTrade(tradeData);
+    addProgress('trade_record');
+    refreshProgressUI();
     showToast('トレードを記録しました！', 'success');
     e.target.reset();
     await loadTrades();
