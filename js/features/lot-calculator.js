@@ -1,4 +1,7 @@
-import { getDerivedSettings, getSettings, updateSettings, applyPreset, resetSettings, PRESET_LABELS } from '../core/settings.js';
+import { getDerivedSettings, getSettings, updateSettings, applyPreset, resetSettings, PRESET_LABELS, onSettingsChange } from '../core/settings.js';
+
+let accountSettingsUnsubscribe = null;
+let lotCalculatorUnsubscribe = null;
 
 const ACCOUNT_SETTINGS_SECTION = `
   <section class="account-settings-card">
@@ -249,6 +252,11 @@ function highlightSelectedAccountType(root, preset) {
 }
 
 function bindAccountSettings(root) {
+  if (accountSettingsUnsubscribe) {
+    accountSettingsUnsubscribe();
+    accountSettingsUnsubscribe = null;
+  }
+
   const numberInputsMap = {
     '#usd-jpy-rate': 'usdJpyRate',
     '#fx-lot-size': 'fxLotSize',
@@ -296,9 +304,15 @@ function bindAccountSettings(root) {
   });
 
   refreshAccountSettingsView(root);
+  accountSettingsUnsubscribe = onSettingsChange(() => refreshAccountSettingsView(root));
 }
 
 function bindLotCalculator(root) {
+  if (lotCalculatorUnsubscribe) {
+    lotCalculatorUnsubscribe();
+    lotCalculatorUnsubscribe = null;
+  }
+
   const pipValueInput = query(root, '#pip-value');
   const currentSetting = query(root, '#current-setting');
   const manualInput = query(root, '#manual-input');
@@ -334,6 +348,10 @@ function bindLotCalculator(root) {
 
   refreshAccountSettingsView(root);
   highlightSelectedAccountType(root, getSettings().presetFx);
+  lotCalculatorUnsubscribe = onSettingsChange(() => {
+    refreshAccountSettingsView(root);
+    highlightSelectedAccountType(root, getSettings().presetFx);
+  });
 }
 
 function calculateLot(root) {
@@ -363,6 +381,15 @@ function calculateLot(root) {
 }
 
 function initLotModules(container, { includeAccountSettings, includeCalculator }) {
+  if (!includeAccountSettings && accountSettingsUnsubscribe) {
+    accountSettingsUnsubscribe();
+    accountSettingsUnsubscribe = null;
+  }
+  if (!includeCalculator && lotCalculatorUnsubscribe) {
+    lotCalculatorUnsubscribe();
+    lotCalculatorUnsubscribe = null;
+  }
+
   container.innerHTML = renderPage({ includeAccountSettings, includeCalculator });
   const root = container;
   if (includeAccountSettings) bindAccountSettings(root);
@@ -375,4 +402,8 @@ export function initAccountSettings(container) {
 
 export function initLotCalculator(container) {
   initLotModules(container, { includeAccountSettings: false, includeCalculator: true });
+}
+
+export function initLotCalculatorPage(container) {
+  initLotModules(container, { includeAccountSettings: true, includeCalculator: true });
 }

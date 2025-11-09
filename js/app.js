@@ -44,35 +44,37 @@ const AI_PANEL_CONTENT_HTML = `
   </div>
 
   <div class="ai-analysis-main-section">
-    <h3>✨ 分析を開始</h3>
+    <h3 class="ai-analysis-main-section__title">
+      <span class="ai-analysis-main-section__icon" aria-hidden="true">
+        <img src="images/ai-analyzer-main.svg" alt="" width="36" height="36" />
+      </span>
+      <span>分析を開始</span>
+    </h3>
     <p class="section-description">
       ボタンをクリックすると、詳細な分析プロンプトが自動生成され、<br>
       クリップボードにコピーされます。AIチャットに貼り付けるだけ！
     </p>
     
     <div class="ai-provider-grid">
-      <button class="btn btn--primary ai-provider-card" data-provider="chatgpt">
-        <span class="provider-icon">💬</span>
-        <div class="provider-info">
-          <strong>ChatGPT</strong>
-          <small>GPT-4で詳細分析</small>
-        </div>
+      <button class="ai-provider-card" data-provider="chatgpt" type="button">
+        <span class="ai-provider-card__badge">
+          <img src="images/ai-provider-chatgpt.svg" alt="ChatGPT" width="164" height="48" />
+        </span>
+        <span class="ai-provider-card__description">GPT-4で詳細分析</span>
       </button>
       
-      <button class="btn btn--primary ai-provider-card" data-provider="claude">
-        <span class="provider-icon">🧠</span>
-        <div class="provider-info">
-          <strong>Claude</strong>
-          <small>Anthropicの最新AI</small>
-        </div>
+      <button class="ai-provider-card" data-provider="claude" type="button">
+        <span class="ai-provider-card__badge">
+          <img src="images/ai-provider-claude.svg" alt="Claude" width="164" height="48" />
+        </span>
+        <span class="ai-provider-card__description">Anthropicの最新AI</span>
       </button>
       
-      <button class="btn btn--primary ai-provider-card" data-provider="gemini">
-        <span class="provider-icon">✨</span>
-        <div class="provider-info">
-          <strong>Gemini</strong>
-          <small>Googleの次世代AI</small>
-        </div>
+      <button class="ai-provider-card" data-provider="gemini" type="button">
+        <span class="ai-provider-card__badge">
+          <img src="images/ai-provider-gemini.svg" alt="Gemini" width="164" height="48" />
+        </span>
+        <span class="ai-provider-card__description">Googleの次世代AI</span>
       </button>
     </div>
     
