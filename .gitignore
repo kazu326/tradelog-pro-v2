@@ -1,34 +1,5 @@
-# 環境変数（機密情報）
+node_modules/
+.DS_Store
 .env
 .env.local
-.env.production
-
-# Node.js
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# エディタ
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# ビルド成果物
 dist/
-build/
-.cache/
-
-# ログ
-*.log
-
-# テスト
-coverage/
-
-# その他
-.tmp/
-temp/

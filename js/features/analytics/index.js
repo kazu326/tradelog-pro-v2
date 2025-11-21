@@ -6,6 +6,8 @@ import { getTrades } from '../../core/storage.js';
 import { calculateStats, calculateDrawdown } from '../../core/analytics.js';
 import { renderCumulativePnlChart } from './charts.js';
 import { showToast } from '../../ui/toast.js';
+import { el } from '../../utils/dom.js';
+import { initMascot, injectMascotStyles } from '../mascot/index.js';
 
 // 初期化済みセクションを追跡
 const initedSections = new Set();
@@ -18,37 +20,44 @@ const chartInstances = new Map();
 export async function initAnalytics(container) {
   console.log('📊 分析ページを初期化中...');
   
+  // マスコットスタイル注入
+  injectMascotStyles();
+  
+  // コンテナをクリア
+  container.innerHTML = '';
+  
   // ローディング表示
-  container.innerHTML = '<div style="text-align: center; padding: 40px;">読み込み中...</div>';
+  container.appendChild(el('div', { 
+    style: { textAlign: 'center', padding: '40px' } 
+  }, '読み込み中...'));
   
   try {
     // トレードデータ取得
     const trades = await getTrades(1000);
     
+    // コンテナを再度クリアしてコンテンツを描画
+    container.innerHTML = '';
+
     if (!trades || trades.length === 0) {
-      container.innerHTML = `
-        <div style="text-align: center; padding: 40px;">
-          <h2>📊 分析</h2>
-          <p>トレードデータがありません</p>
-          <p style="color: var(--color-text-secondary); margin-top: 20px;">
-            トレードを記録すると、ここに統計情報が表示されます。
-          </p>
-        </div>
-      `;
+      container.appendChild(createEmptyState());
       return;
     }
+    
+    // マスコットエリアを追加（概要タブの上などではなく、常設としてタブの上に配置）
+    initMascot(container);
     
     // 統計計算
     const stats = calculateStats(trades);
     const drawdown = calculateDrawdown(trades);
     
     // UIを構築
-    container.innerHTML = buildAnalyticsUI(stats, drawdown, trades);
+    const analyticsUI = buildAnalyticsUI(stats, drawdown, trades);
+    container.appendChild(analyticsUI);
     
     // タブとアコーディオンのイベントリスナーを設定
     setupTabs();
     setupAccordions(trades);
-    bindImportButton();
+    bindImportButton(); // 既存関数だが中身は後でリファクタ
 
     // 初期タブが graphs の場合は、初回描画を即時実行
     const savedTab = localStorage.getItem('analytics:tab') || 'overview';
@@ -59,13 +68,26 @@ export async function initAnalytics(container) {
   } catch (error) {
     console.error('分析ページの初期化エラー:', error);
     showToast('分析データの読み込みに失敗しました', 'error');
-    container.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--color-error);">
-        <h2>エラーが発生しました</h2>
-        <p>${error.message || 'データの読み込みに失敗しました'}</p>
-      </div>
-    `;
+    container.innerHTML = '';
+    container.appendChild(createErrorState(error));
   }
+}
+
+function createEmptyState() {
+  return el('div', { style: { textAlign: 'center', padding: '40px' } },
+    el('h2', {}, '📊 分析'),
+    el('p', {}, 'トレードデータがありません'),
+    el('p', { style: { color: 'var(--color-text-secondary)', marginTop: '20px' } },
+      'トレードを記録すると、ここに統計情報が表示されます。'
+    )
+  );
+}
+
+function createErrorState(error) {
+  return el('div', { style: { textAlign: 'center', padding: '40px', color: 'var(--color-error)' } },
+    el('h2', {}, 'エラーが発生しました'),
+    el('p', {}, error.message || 'データの読み込みに失敗しました')
+  );
 }
 
 /**
@@ -75,68 +97,68 @@ function buildAnalyticsUI(stats, drawdown, trades) {
   // 保存されたタブを取得
   const savedTab = localStorage.getItem('analytics:tab') || 'overview';
   
-  return `
-    <div class="analytics-page">
-      <h2 style="margin-bottom: 24px;">📊 分析</h2>
+  return el('div', { className: 'analytics-page' },
+    el('h2', { style: { marginBottom: '24px' } }, '📊 分析'),
+    
+    // タブ
+    el('div', { className: 'analytics-tabs' },
+      createTabButton('overview', '概要', savedTab === 'overview'),
+      createTabButton('detail', '詳細', savedTab === 'detail'),
+      createTabButton('graphs', 'グラフ', savedTab === 'graphs')
+    ),
+    
+    // タブコンテンツ
+    el('div', { className: 'analytics-tab-content' },
+      // 概要タブ
+      el('div', { 
+        id: 'analytics-overview', 
+        className: `analytics-tab-pane ${savedTab === 'overview' ? 'active' : ''}` 
+      },
+        buildOverviewTab(stats, drawdown),
+        el('div', { style: { marginTop: '16px', display: 'flex', justifyContent: 'flex-end' } },
+          el('button', { id: 'open-import-wizard', className: 'btn-primary' }, 'データをインポート')
+        )
+      ),
       
-      <!-- タブ -->
-      <div class="analytics-tabs">
-        <button class="analytics-tab-btn ${savedTab === 'overview' ? 'active' : ''}" 
-                data-tab="overview" 
-                aria-selected="${savedTab === 'overview'}">
-          概要
-        </button>
-        <button class="analytics-tab-btn ${savedTab === 'detail' ? 'active' : ''}" 
-                data-tab="detail" 
-                aria-selected="${savedTab === 'detail'}">
-          詳細
-        </button>
-        <button class="analytics-tab-btn ${savedTab === 'graphs' ? 'active' : ''}" 
-                data-tab="graphs" 
-                aria-selected="${savedTab === 'graphs'}">
-          グラフ
-        </button>
-      </div>
+      // 詳細タブ
+      el('div', { 
+        id: 'analytics-detail', 
+        className: `analytics-tab-pane ${savedTab === 'detail' ? 'active' : ''}` 
+      },
+        buildDetailTab()
+      ),
       
-      <!-- タブコンテンツ -->
-      <div class="analytics-tab-content">
-        <!-- 概要タブ -->
-        <div id="analytics-overview" class="analytics-tab-pane ${savedTab === 'overview' ? 'active' : ''}">
-          ${buildOverviewTab(stats, drawdown)}
-          <div style="margin-top:16px; display:flex; justify-content:flex-end;">
-            <button id="open-import-wizard" class="btn-primary">データをインポート</button>
-          </div>
-        </div>
-        
-        <!-- 詳細タブ -->
-        <div id="analytics-detail" class="analytics-tab-pane ${savedTab === 'detail' ? 'active' : ''}">
-          ${buildDetailTab()}
-        </div>
-        
-        <!-- グラフタブ -->
-        <div id="analytics-graphs" class="analytics-tab-pane ${savedTab === 'graphs' ? 'active' : ''}">
-          ${buildGraphsTab()}
-        </div>
-      </div>
-    </div>
-  `;
+      // グラフタブ
+      el('div', { 
+        id: 'analytics-graphs', 
+        className: `analytics-tab-pane ${savedTab === 'graphs' ? 'active' : ''}` 
+      },
+        buildGraphsTab()
+      )
+    )
+  );
+}
+
+function createTabButton(tabId, label, isActive) {
+  return el('button', {
+    className: `analytics-tab-btn ${isActive ? 'active' : ''}`,
+    dataset: { tab: tabId },
+    'aria-selected': isActive
+  }, label);
 }
 
 /**
  * 概要タブを構築
  */
 function buildOverviewTab(stats, drawdown) {
-  return `
-    <div class="overview-section">
-      <!-- 概要カード（4つ横並び） -->
-      <div class="summary-cards">
-        ${createSummaryCard('総損益', formatCurrency(stats.totalPnl), stats.totalPnl >= 0 ? 'positive' : 'negative')}
-        ${createSummaryCard('勝率', `${stats.winRate.toFixed(1)}%`, stats.winRate >= 50 ? 'positive' : 'neutral')}
-        ${createSummaryCard('プロフィットファクター', stats.profitFactor.toFixed(2), stats.profitFactor >= 1.5 ? 'positive' : stats.profitFactor >= 1.0 ? 'neutral' : 'negative')}
-        ${createSummaryCard('最大DD', `${drawdown.max.toFixed(1)}%`, drawdown.max <= 20 ? 'positive' : drawdown.max <= 50 ? 'neutral' : 'negative')}
-      </div>
-    </div>
-  `;
+  return el('div', { className: 'overview-section' },
+    el('div', { className: 'summary-cards' },
+      createSummaryCard('総損益', formatCurrency(stats.totalPnl), stats.totalPnl >= 0 ? 'positive' : 'negative'),
+      createSummaryCard('勝率', `${stats.winRate.toFixed(1)}%`, stats.winRate >= 50 ? 'positive' : 'neutral'),
+      createSummaryCard('プロフィットファクター', stats.profitFactor.toFixed(2), stats.profitFactor >= 1.5 ? 'positive' : stats.profitFactor >= 1.0 ? 'neutral' : 'negative'),
+      createSummaryCard('最大DD', `${drawdown.max.toFixed(1)}%`, drawdown.max <= 20 ? 'positive' : drawdown.max <= 50 ? 'neutral' : 'negative')
+    )
+  );
 }
 
 /**
@@ -154,156 +176,65 @@ function buildDetailTab() {
   // 初期は「通貨ペア別」のみ開く
   const defaultOpen = !pairStatsOpen && !timeStatsOpen && !dayStatsOpen && !lotStatsOpen && !streakStatsOpen && !riskScoreOpen;
   
-  return `
-    <div class="detail-section">
-      <!-- 通貨ペア別統計 -->
-      <div class="accordion ${defaultOpen || pairStatsOpen ? 'accordion--open' : ''}" 
-           id="pair-stats" 
-           data-section="pair-stats">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${defaultOpen || pairStatsOpen}"
-                aria-controls="pair-stats-content">
-          <span class="accordion__title">📊 通貨ペア別統計</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="pair-stats-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 時間帯別統計 -->
-      <div class="accordion ${timeStatsOpen ? 'accordion--open' : ''}" 
-           id="time-stats" 
-           data-section="time-stats">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${timeStatsOpen}"
-                aria-controls="time-stats-content">
-          <span class="accordion__title">⏰ 時間帯別統計</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="time-stats-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 曜日別統計 -->
-      <div class="accordion ${dayStatsOpen ? 'accordion--open' : ''}" 
-           id="day-stats" 
-           data-section="day-stats">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${dayStatsOpen}"
-                aria-controls="day-stats-content">
-          <span class="accordion__title">📅 曜日別統計</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="day-stats-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- ロット別統計 -->
-      <div class="accordion ${lotStatsOpen ? 'accordion--open' : ''}" 
-           id="lot-stats" 
-           data-section="lot-stats">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${lotStatsOpen}"
-                aria-controls="lot-stats-content">
-          <span class="accordion__title">💰 ロット別統計</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="lot-stats-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 連勝・連敗統計 -->
-      <div class="accordion ${streakStatsOpen ? 'accordion--open' : ''}" 
-           id="streak-stats" 
-           data-section="streak-stats">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${streakStatsOpen}"
-                aria-controls="streak-stats-content">
-          <span class="accordion__title">🔥 連勝・連敗統計</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="streak-stats-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- リスク管理スコア -->
-      <div class="accordion ${riskScoreOpen ? 'accordion--open' : ''}" 
-           id="risk-score" 
-           data-section="risk-score">
-        <button class="accordion__toggle" 
-                data-acc-toggle 
-                aria-expanded="${riskScoreOpen}"
-                aria-controls="risk-score-content">
-          <span class="accordion__title">🎯 リスク管理スコア</span>
-          <span class="accordion__icon">▼</span>
-        </button>
-        <div class="accordion__content" id="risk-score-content">
-          <div class="accordion__body">
-            <div class="loading-spinner" style="text-align: center; padding: 40px;">
-              読み込み中...
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  return el('div', { className: 'detail-section' },
+    createAccordion('pair-stats', '📊 通貨ペア別統計', defaultOpen || pairStatsOpen),
+    createAccordion('time-stats', '⏰ 時間帯別統計', timeStatsOpen),
+    createAccordion('day-stats', '📅 曜日別統計', dayStatsOpen),
+    createAccordion('lot-stats', '💰 ロット別統計', lotStatsOpen),
+    createAccordion('streak-stats', '🔥 連勝・連敗統計', streakStatsOpen),
+    createAccordion('risk-score', '🎯 リスク管理スコア', riskScoreOpen)
+  );
+}
+
+function createAccordion(id, title, isOpen) {
+  return el('div', { 
+    className: `accordion ${isOpen ? 'accordion--open' : ''}`, 
+    id: id, 
+    dataset: { section: id } 
+  },
+    el('button', { 
+      className: 'accordion__toggle', 
+      dataset: { accToggle: '' },
+      'aria-expanded': isOpen,
+      'aria-controls': `${id}-content`
+    },
+      el('span', { className: 'accordion__title' }, title),
+      el('span', { className: 'accordion__icon' }, '▼')
+    ),
+    el('div', { className: 'accordion__content', id: `${id}-content` },
+      el('div', { className: 'accordion__body' },
+        el('div', { className: 'loading-spinner', style: { textAlign: 'center', padding: '40px' } }, '読み込み中...')
+      )
+    )
+  );
 }
 
 /**
  * グラフタブを構築
  */
 function buildGraphsTab() {
-  return `
-    <div class="graphs-section">
-      <div class="graphs-toolbar" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-        <h3 style="margin:0;">📈 累積損益</h3>
-        <div class="period-selector" style="margin-left:auto;">
-          <select id="analytics-period" aria-label="集計期間">
-            <option value="monthly" selected>月次</option>
-            <option value="weekly">週次</option>
-            <option value="daily">日次</option>
-            <option value="yearly">年次</option>
-          </select>
-        </div>
-        <span id="analytics-datascarce" style="display:none; font-size:12px; color:var(--color-warning); border:1px solid var(--color-warning); padding:2px 6px; border-radius:6px;">データ不足</span>
-      </div>
-      <div class="chart-card">
-        <div class="chart-container">
-          <canvas id="monthly-pnl-canvas" aria-label="月間損益グラフ" role="img"></canvas>
-        </div>
-      </div>
-    </div>
-  `;
+  return el('div', { className: 'graphs-section' },
+    el('div', { className: 'graphs-toolbar', style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' } },
+      el('h3', { style: { margin: '0' } }, '📈 累積損益'),
+      el('div', { className: 'period-selector', style: { marginLeft: 'auto' } },
+        el('select', { id: 'analytics-period', 'aria-label': '集計期間' },
+          el('option', { value: 'monthly', selected: true }, '月次'),
+          el('option', { value: 'weekly' }, '週次'),
+          el('option', { value: 'daily' }, '日次'),
+          el('option', { value: 'yearly' }, '年次')
+        )
+      ),
+      el('span', { 
+        id: 'analytics-datascarce', 
+        style: { display: 'none', fontSize: '12px', color: 'var(--color-warning)', border: '1px solid var(--color-warning)', padding: '2px 6px', borderRadius: '6px' } 
+      }, 'データ不足')
+    ),
+    el('div', { className: 'chart-card' },
+      el('div', { className: 'chart-container' },
+        el('canvas', { id: 'monthly-pnl-canvas', 'aria-label': '月間損益グラフ', role: 'img' })
+      )
+    )
+  );
 }
 
 /**
@@ -311,7 +242,6 @@ function buildGraphsTab() {
  */
 function setupTabs() {
   const tabButtons = document.querySelectorAll('.analytics-tab-btn');
-  const tabPanes = document.querySelectorAll('.analytics-tab-pane');
   
   tabButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -429,10 +359,10 @@ function showGraphsLoading() {
   if (!container) return;
   container.setAttribute('data-loading', '1');
   if (!container.querySelector('.chart-loading')) {
-    const d = document.createElement('div');
-    d.className = 'chart-loading';
-    d.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.6);font-size:14px;';
-    d.textContent = '読み込み中...';
+    const d = el('div', { 
+      className: 'chart-loading',
+      style: { position: 'absolute', inset: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.6)', fontSize: '14px' }
+    }, '読み込み中...');
     container.appendChild(d);
   }
 }
@@ -524,7 +454,8 @@ function bindAccordion(sectionId, initFn) {
         const content = root.querySelector('.accordion__body');
         if (content) {
           // ローディング表示
-          content.innerHTML = '<div class="loading-spinner" style="text-align: center; padding: 40px;">読み込み中...</div>';
+          content.innerHTML = '';
+          content.appendChild(el('div', { className: 'loading-spinner', style: { textAlign: 'center', padding: '40px' } }, '読み込み中...'));
           
           // 重い処理は非同期で実行
           await new Promise(resolve => setTimeout(resolve, 0)); // UIスレッドブロック回避
@@ -537,7 +468,8 @@ function bindAccordion(sectionId, initFn) {
         showToast('データの読み込みに失敗しました', 'error');
         const content = root.querySelector('.accordion__body');
         if (content) {
-          content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--color-error);">エラーが発生しました</div>`;
+          content.innerHTML = '';
+          content.appendChild(el('div', { style: { textAlign: 'center', padding: '40px', color: 'var(--color-error)' } }, 'エラーが発生しました'));
         }
       }
     }
@@ -559,15 +491,13 @@ function createSummaryCard(title, value, status = 'neutral') {
   const statusClass = `summary-card--${status}`;
   const statusIcon = getStatusIcon(status);
   
-  return `
-    <div class="summary-card ${statusClass}">
-      <div class="summary-card__header">
-        <span class="summary-card__title">${title}</span>
-        <span class="summary-card__icon">${statusIcon}</span>
-      </div>
-      <div class="summary-card__value">${value}</div>
-    </div>
-  `;
+  return el('div', { className: `summary-card ${statusClass}` },
+    el('div', { className: 'summary-card__header' },
+      el('span', { className: 'summary-card__title' }, title),
+      el('span', { className: 'summary-card__icon' }, statusIcon)
+    ),
+    el('div', { className: 'summary-card__value' }, value)
+  );
 }
 
 /**
@@ -621,4 +551,3 @@ function destroyAllCharts() {
 export function saveChartInstance(chartId, chart) {
   chartInstances.set(chartId, chart);
 }
-

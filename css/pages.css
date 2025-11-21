@@ -727,7 +727,7 @@
   }
 }
 
-/* ロット計算ツール */
+/* ロット計算ツール（旧デザイン互換） */
 .lot-calculator-container {
   max-width: 800px;
   margin: 0 auto;
@@ -1579,5 +1579,434 @@ kbd {
   .ai-analysis-main-section,
   .ai-sample-section {
     padding: 20px;
+  }
+}
+
+/* ========================================
+   ロット計算機能 - 高級化リデザイン
+======================================== */
+
+/* メインコンテナ */
+.lot-calculator {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  background: #fafafa;
+  min-height: 100vh;
+}
+
+.lot-calculator .calculator-title {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 40px;
+  text-align: left;
+  color: #2c3e50;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 15px;
+}
+
+.lot-calculator .section-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 30px 0 15px;
+  color: #7f8c8d;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ========================================
+   カテゴリー選択（小さなボタン）
+======================================== */
+.lot-calculator .category-selector {
+  margin-bottom: 30px;
+}
+
+.lot-calculator .category-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.lot-calculator .category-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #7f8c8d;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  letter-spacing: 0.3px;
+}
+
+.lot-calculator .category-btn:hover {
+  border-color: #bdc3c7;
+  color: #2c3e50;
+  background: #f8f9fa;
+}
+
+.lot-calculator .category-btn.active {
+  color: white;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* カテゴリーごとの色（activeのみ） */
+.lot-calculator .category-btn.active[data-category="cross-yen"] {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+}
+
+.lot-calculator .category-btn.active[data-category="gold"] {
+  background: linear-gradient(135deg, #f39c12 0%, #d68910 100%);
+  box-shadow: 0 2px 8px rgba(243, 156, 18, 0.3);
+}
+
+.lot-calculator .category-btn.active[data-category="stock"] {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.lot-calculator .category-btn.active[data-category="crypto"] {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.3);
+}
+
+/* ========================================
+   カテゴリー情報カード（縁取り変化）
+======================================== */
+.lot-calculator .category-card-container {
+  margin-bottom: 30px;
+}
+
+.lot-calculator .category-info-card {
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 仮想通貨の背景画像（透過20%） */
+.lot-calculator .category-card-container[data-category="crypto"] .category-info-card {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="50" font-size="60" opacity="0.05">₿</text></svg>');
+  background-repeat: repeat;
+  background-size: 80px;
+}
+
+.lot-calculator .card-content {
+  position: relative;
+  z-index: 1;
+}
+
+.lot-calculator .card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.lot-calculator .card-description {
+  font-size: 13px;
+  color: #7f8c8d;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ========================================
+   銘柄選択
+======================================== */
+.lot-calculator .pair-selector {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 30px;
+  border: 1px solid #e0e0e0;
+}
+
+.lot-calculator .pair-select {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.25s;
+  color: #2c3e50;
+}
+
+.lot-calculator .pair-select:hover,
+.lot-calculator .pair-select:focus {
+  border-color: #95a5a6;
+  outline: none;
+}
+
+.lot-calculator .current-rate {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #ecf0f1;
+}
+
+.lot-calculator .rate-label {
+  font-weight: 500;
+  color: #7f8c8d;
+  font-size: 13px;
+}
+
+.lot-calculator .rate-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2c3e50;
+  letter-spacing: 0.5px;
+}
+
+.lot-calculator .rate-loading {
+  font-size: 14px;
+  color: #95a5a6;
+  animation: pulse 1.5s infinite;
+}
+
+.lot-calculator .rate-error {
+  font-size: 14px;
+  color: #e74c3c;
+}
+
+/* ========================================
+   計算パラメータ入力
+======================================== */
+.lot-calculator .calculator-inputs {
+  background: white;
+  border-radius: 8px;
+  padding: 30px;
+  border: 1px solid #e0e0e0;
+  margin-bottom: 30px;
+}
+
+.lot-calculator .input-group {
+  margin-bottom: 24px;
+}
+
+.lot-calculator .input-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #2c3e50;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.lot-calculator .input-group input[type="number"],
+.lot-calculator .input-group select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  transition: border-color 0.25s;
+  background: white;
+  color: #2c3e50;
+}
+
+.lot-calculator .input-group input[type="number"]:focus,
+.lot-calculator .input-group select:focus {
+  border-color: #95a5a6;
+  outline: none;
+}
+
+.lot-calculator .input-group input[type="range"] {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #ecf0f1;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.lot-calculator .input-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  transition: transform 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lot-calculator .input-group input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.lot-calculator .input-group input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lot-calculator .risk-presets {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.lot-calculator .risk-presets button {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.25s;
+  color: #7f8c8d;
+}
+
+.lot-calculator .risk-presets button:hover {
+  border-color: #95a5a6;
+  color: #2c3e50;
+}
+
+.lot-calculator .risk-presets button.recommended {
+  border-color: #3498db;
+  color: #3498db;
+  font-weight: 500;
+}
+
+.lot-calculator .calculate-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 24px;
+  transition: all 0.25s ease;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+}
+
+.lot-calculator .calculate-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.lot-calculator .calculate-btn:active {
+  transform: translateY(0);
+}
+
+/* ========================================
+   計算結果表示
+======================================== */
+.lot-calculator .calculator-results {
+  margin-top: 30px;
+}
+
+.lot-calculator .result-card {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  border-radius: 8px;
+  padding: 30px;
+  color: white;
+  box-shadow: 0 4px 16px rgba(44, 62, 80, 0.2);
+}
+
+.lot-calculator .result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lot-calculator .result-item:last-child {
+  border-bottom: none;
+}
+
+.lot-calculator .result-item.primary {
+  padding: 20px 0;
+  margin-bottom: 12px;
+}
+
+.lot-calculator .result-label {
+  font-size: 13px;
+  opacity: 0.85;
+  letter-spacing: 0.3px;
+}
+
+.lot-calculator .result-item.primary .result-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.lot-calculator .result-value {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.lot-calculator .result-item.primary .result-value {
+  font-size: 32px;
+}
+
+/* ========================================
+   レスポンシブ対応
+======================================== */
+@media (max-width: 768px) {
+  .lot-calculator {
+    padding: 20px 15px;
+  }
+
+  .lot-calculator .calculator-title {
+    font-size: 20px;
+  }
+
+  .lot-calculator .category-buttons {
+    gap: 8px;
+  }
+
+  .lot-calculator .category-btn {
+    padding: 6px 16px;
+    font-size: 12px;
+  }
+
+  .lot-calculator .result-value {
+    font-size: 20px;
+  }
+
+  .lot-calculator .result-item.primary .result-value {
+    font-size: 26px;
+  }
+}
+
+@media (max-width: 480px) {
+  .lot-calculator {
+    padding: 15px 10px;
+  }
+
+  .lot-calculator .risk-presets {
+    flex-direction: column;
+  }
+
+  .lot-calculator .category-info-card {
+    padding: 18px;
   }
 }

@@ -1,178 +1,394 @@
-// Import wizard v2 - 2025-11-07
+// Import wizard v3 - Bulk Edit Support
 import * as Importer from './index.js';
 import { showToast } from '../ui/toast.js';
+import { el } from '../utils/dom.js';
 
+// 状態管理
+let state = {
+  parsedRows: [], // { data, isValid, errors, id }
+  sourceType: 'csv'
+};
+
+/**
+ * インポートウィザードを開く
+ */
 export function openImportWizard() {
   if (document.getElementById('import-wizard')) return;
   
-  // bodyのスクロールを無効化（横ブレ防止）
+  // 初期化
+  state = { parsedRows: [], sourceType: 'csv' };
+  
   const originalOverflow = document.body.style.overflow;
   const originalWidth = document.body.style.width;
   document.body.classList.add('no-scroll');
   
-  const wrap = document.createElement('div');
-  wrap.id = 'import-wizard';
-  wrap.innerHTML = `
-    <div class="modal-backdrop"></div>
-    <div class="modal">
-      <div class="modal__header">
-        <h3>データインポート</h3>
-        <button class="modal__close" aria-label="閉じる">✕</button>
-      </div>
-      <div class="modal__body">
-        <div class="import-source">
-          <label>ソース:</label>
-          <select id="imp-source">
-            <option value="csv">CSV</option>
-            <option value="json">JSON</option>
-            <option value="xlsx">XLSX</option>
-            <option value="paste">コピペ</option>
-          </select>
-        </div>
-        <div class="import-controls" style="flex-wrap:wrap;">
-          <input type="file" id="imp-file" accept=".csv,.json,.xlsx" />
-          <textarea id="imp-text" placeholder="ここに貼り付け（CSV/JSON 自動判別）" style="display:none;height:120px;width:100%"></textarea>
-          <div id="gsheets-block" style="display:none; width:100%;">
-            <input type="url" id="imp-gsheets-url" placeholder="Googleスプレッドシートの共有URL（閲覧可能に設定）" style="width:100%"/>
-            <small class="help-text">共有リンクを貼るとCSVとして読み込みます</small>
-          </div>
-        </div>
-        <div class="progress-bar" id="imp-progress" style="display:none"><div></div></div>
-        <div class="import-preview" id="imp-preview"></div>
-      </div>
-      <div class="modal__footer">
-        <button id="imp-run" class="btn-primary">インポート開始</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-
   const close = () => {
-    wrap.remove();
-    // 復元
+    const wrap = document.getElementById('import-wizard');
+    if (wrap) wrap.remove();
     document.body.classList.remove('no-scroll');
     document.body.style.overflow = originalOverflow;
     document.body.style.width = originalWidth;
   };
-  wrap.querySelector('.modal__close').addEventListener('click', close);
-  wrap.querySelector('.modal-backdrop').addEventListener('click', close);
 
-  const sel = wrap.querySelector('#imp-source');
-  const file = wrap.querySelector('#imp-file');
-  const text = wrap.querySelector('#imp-text');
-  sel.addEventListener('change', () => {
+  const handleSourceChange = () => {
+    const sel = document.getElementById('imp-source');
+    const file = document.getElementById('imp-file');
+    const text = document.getElementById('imp-text');
+    const gsheetsBlock = document.getElementById('gsheets-block');
+    
+    if (!sel || !file || !text || !gsheetsBlock) return;
+
+    state.sourceType = sel.value;
     const v = sel.value;
-    file.style.display = (v==='paste') ? 'none' : '';
-    text.style.display = (v==='paste') ? '' : 'none';
-    wrap.querySelector('#gsheets-block').style.display = (v==='csv') ? '' : 'none';
-  });
+    file.style.display = (v === 'paste') ? 'none' : '';
+    text.style.display = (v === 'paste') ? '' : 'none';
+    gsheetsBlock.style.display = (v === 'csv') ? '' : 'none';
+  };
 
-  wrap.querySelector('#imp-run').addEventListener('click', async () => {
+  // ファイル読み込み・パース処理（まだ保存はしない）
+  const handleLoad = async () => {
     try {
-      const progress = wrap.querySelector('#imp-progress');
+      const progress = document.getElementById('imp-progress');
       const bar = progress.querySelector('div');
       progress.style.display = '';
       bar.style.width = '10%';
 
-      let rows = [];
-      const mode = sel.value;
+      const text = document.getElementById('imp-text');
+      const file = document.getElementById('imp-file');
+      
+      let rawData = [];
+      const mode = state.sourceType;
+
       if (mode === 'paste') {
         const txt = text.value.trim();
-        rows = Importer.parseClipboard(txt);
+        rawData = Importer.parseClipboard(txt);
       } else if (mode === 'csv') {
-        const gsUrl = wrap.querySelector('#imp-gsheets-url').value.trim();
+        const gsUrl = document.getElementById('imp-gsheets-url').value.trim();
         if (gsUrl) {
           if (Importer.parseFromUrl) {
-            rows = await Importer.parseFromUrl(gsUrl);
+            rawData = await Importer.parseFromUrl(gsUrl);
           } else {
-            // フォールバック: 直接fetchしてCSVとして扱う
-            try {
-              const res = await fetch(gsUrl, { mode: 'cors' });
-              const txt = await res.text();
-              rows = Importer.parseCSV(txt);
-            } catch { rows = []; }
+            const res = await fetch(gsUrl, { mode: 'cors' });
+            const txt = await res.text();
+            rawData = Importer.parseCSV(txt);
           }
         } else {
           const buf = await readFileAsText(file.files?.[0]);
-          rows = Importer.parseCSV(buf);
+          rawData = Importer.parseCSV(buf);
         }
       } else if (mode === 'json') {
         const buf = await readFileAsText(file.files?.[0]);
-        rows = Importer.parseJSON(buf);
+        rawData = Importer.parseJSON(buf);
       } else if (mode === 'xlsx') {
         const ab = await readFileAsArrayBuffer(file.files?.[0]);
-        rows = await Importer.parseXLSX(ab);
+        rawData = await Importer.parseXLSX(ab);
       }
-      bar.style.width = '30%';
+      
+      bar.style.width = '50%';
 
-      if (!rows || rows.length === 0) {
+      if (!rawData || rawData.length === 0) {
         showToast('データが読み取れませんでした', 'error');
         progress.style.display = 'none';
         return;
       }
 
-      const { okCount, ngCount, samples, errors } = await Importer.importTrades(rows);
-      bar.style.width = '90%';
+      // 生データを編集用オブジェクトに変換
+      state.parsedRows = rawData.map((row, idx) => ({
+        id: `row-${idx}`,
+        data: row,
+        selected: true,
+        isValid: true, // 後で検証
+        errors: []
+      }));
 
-      renderPreview(wrap.querySelector('#imp-preview'), samples, okCount, ngCount, errors);
+      // 初期バリデーション
+      validateRows();
+
       bar.style.width = '100%';
-      setTimeout(()=>{ progress.style.display='none'; }, 400);
+      setTimeout(() => { progress.style.display = 'none'; }, 300);
       
-      // 結果を表示
+      // 編集画面へ切り替え
+      switchView('edit');
+      renderEditor();
+
+    } catch (e) {
+      console.error('Load error:', e);
+      showToast('読み込みエラー: ' + e.message, 'error');
+      document.getElementById('imp-progress').style.display = 'none';
+    }
+  };
+
+  // 保存実行
+  const handleSave = async () => {
+    const validRows = state.parsedRows.filter(r => r.selected && r.isValid);
+    if (validRows.length === 0) {
+      showToast('インポート対象の有効なデータがありません', 'warning');
+      return;
+    }
+
+    const confirmMsg = `${validRows.length} 件のデータをインポートしますか？`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const progress = document.getElementById('imp-progress');
+      progress.style.display = '';
+      progress.querySelector('div').style.width = '50%';
+
+      // Importer.importTrades は raw objects を期待する
+      const dataToImport = validRows.map(r => r.data);
+      const { okCount, ngCount, errors } = await Importer.importTrades(dataToImport);
+      
+      progress.querySelector('div').style.width = '100%';
+
       if (ngCount > 0) {
-        showToast(`インポート完了: 成功 ${okCount} / 失敗 ${ngCount}。詳細はプレビューを確認してください。`, 'warning');
+        showToast(`完了: 成功 ${okCount} / 失敗 ${ngCount}`, 'warning');
+        console.warn('Import errors:', errors);
       } else {
-        showToast(`インポート完了: ${okCount} 件を正常にインポートしました！`, 'success');
-        // 成功時のみ自動遷移
+        showToast(`${okCount} 件をインポートしました！`, 'success');
+        // 成功したら画面遷移して閉じる
         try {
           localStorage.setItem('analytics:tab', 'graphs');
-          wrap.remove();
           const analyticsTabBtn = document.querySelector('.tab-btn[data-tab="analytics"]');
-          if (analyticsTabBtn) {
-            analyticsTabBtn.click();
-          }
+          if (analyticsTabBtn) analyticsTabBtn.click();
         } catch {}
+        close();
       }
     } catch (e) {
-      showToast('インポート中にエラーが発生しました', 'error');
+      showToast('保存中にエラーが発生しました', 'error');
+      console.error(e);
+    } finally {
+      const p = document.getElementById('imp-progress');
+      if (p) p.style.display = 'none';
     }
-  });
+  };
+
+  const wrap = el('div', { id: 'import-wizard' },
+    el('div', { className: 'modal-backdrop', onClick: close }),
+    el('div', { className: 'modal', style: { maxWidth: '90%', width: '1000px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' } },
+      el('div', { className: 'modal__header' },
+        el('h3', {}, 'データインポート＆一括編集'),
+        el('button', { className: 'modal__close', onClick: close }, '✕')
+      ),
+      
+      // Step 1: Source Selection
+      el('div', { id: 'view-source', className: 'modal__body' },
+        el('div', { className: 'import-source' },
+          el('label', {}, 'ソース:'),
+          el('select', { id: 'imp-source', onChange: handleSourceChange },
+            el('option', { value: 'csv' }, 'CSV'),
+            el('option', { value: 'json' }, 'JSON'),
+            el('option', { value: 'xlsx' }, 'XLSX'),
+            el('option', { value: 'paste' }, 'コピペ')
+          )
+        ),
+        el('div', { className: 'import-controls', style: { marginTop: '16px' } },
+          el('input', { type: 'file', id: 'imp-file', accept: '.csv,.json,.xlsx' }),
+          el('textarea', { id: 'imp-text', placeholder: 'ここに貼り付け', style: { display: 'none', height: '120px', width: '100%' } }),
+          el('div', { id: 'gsheets-block', style: { display: 'none', marginTop: '8px' } },
+            el('input', { type: 'url', id: 'imp-gsheets-url', placeholder: 'Googleスプレッドシートの共有URL', style: { width: '100%' } })
+          )
+        ),
+        el('button', { className: 'btn-primary', style: { marginTop: '20px' }, onClick: handleLoad }, '読み込み')
+      ),
+
+      // Step 2: Editor (Table)
+      el('div', { id: 'view-edit', className: 'modal__body', style: { display: 'none', flex: '1', overflow: 'hidden', padding: '0' } },
+        // Toolbar
+        el('div', { className: 'editor-toolbar', style: { padding: '10px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '10px', background: 'var(--color-bg-secondary)' } },
+          el('button', { className: 'btn-secondary btn-sm', onClick: () => handleBulkAction('delete') }, '🗑 選択削除'),
+          el('span', { style: { borderLeft: '1px solid #ccc', margin: '0 5px' } }),
+          el('select', { id: 'bulk-pair', style: { fontSize: '12px' } },
+            el('option', { value: '' }, '通貨ペア一括変更...'),
+            el('option', { value: 'USD/JPY' }, 'USD/JPY'),
+            el('option', { value: 'EUR/USD' }, 'EUR/USD'),
+            el('option', { value: 'XAU/USD' }, 'GOLD')
+          ),
+          el('button', { className: 'btn-secondary btn-sm', onClick: () => handleBulkAction('pair') }, '適用'),
+          el('span', { style: { flex: '1' } }),
+          el('div', { id: 'edit-summary', style: { fontSize: '12px', alignSelf: 'center' } }, '0 件')
+        ),
+        // Table Container
+        el('div', { className: 'editor-table-container', style: { flex: '1', overflow: 'auto', padding: '10px' } },
+          el('table', { id: 'editor-table', className: 'data-table' }) // 中身は renderEditor で生成
+        )
+      ),
+
+      el('div', { className: 'progress-bar', id: 'imp-progress', style: { display: 'none' } },
+        el('div', {})
+      ),
+
+      el('div', { className: 'modal__footer', style: { justifyContent: 'space-between' } },
+        el('button', { id: 'btn-back', className: 'btn-secondary', style: { display: 'none' }, onClick: () => switchView('source') }, '← 戻る'),
+        el('button', { id: 'btn-save', className: 'btn-primary', style: { display: 'none' }, onClick: handleSave }, 'インポート実行')
+      )
+    )
+  );
+
+  document.body.appendChild(wrap);
+  handleSourceChange(); // 初期表示設定
 }
 
-function renderPreview(container, samples, ok, ng, errors = []) {
-  const head = ['created_at','pair','direction','entry_price','exit_price','lot_size','pips','pnl','notes'];
-  const rows = samples.map(r => `<tr>${head.map(h=>`<td>${escapeHtml(r[h]??'')}</td>`).join('')}</tr>`).join('');
-  
-  let errorHtml = '';
-  if (errors.length > 0) {
-    errorHtml = `
-      <div style="margin-top:16px; padding:12px; background:var(--color-error-bg, #fee); border:1px solid var(--color-error, #f44); border-radius:8px;">
-        <strong style="color:var(--color-error, #f44);">エラー詳細:</strong>
-        <ul style="margin:8px 0 0 0; padding-left:20px; font-size:12px;">
-          ${errors.slice(0, 5).map(e => `<li>行 ${e.index}: ${escapeHtml(e.error)}</li>`).join('')}
-          ${errors.length > 5 ? `<li>...他 ${errors.length - 5} 件のエラー</li>` : ''}
-        </ul>
-      </div>
-    `;
+function switchView(view) {
+  const sourceView = document.getElementById('view-source');
+  const editView = document.getElementById('view-edit');
+  const btnBack = document.getElementById('btn-back');
+  const btnSave = document.getElementById('btn-save');
+
+  if (view === 'edit') {
+    sourceView.style.display = 'none';
+    editView.style.display = 'flex';
+    editView.style.flexDirection = 'column';
+    btnBack.style.display = '';
+    btnSave.style.display = '';
+  } else {
+    sourceView.style.display = '';
+    editView.style.display = 'none';
+    btnBack.style.display = 'none';
+    btnSave.style.display = 'none';
   }
-  
-  container.innerHTML = `
-    <div style="display:flex; gap:12px; align-items:center; margin:8px 0;">
-      <strong>プレビュー</strong>
-      <span style="font-size:12px; color:var(--color-text-secondary)">成功 ${ok} / 失敗 ${ng}</span>
-    </div>
-    <div style="overflow:auto; max-height:240px; border:1px solid var(--color-border); border-radius:8px;">
-      <table style="width:100%; border-collapse:collapse;">
-        <thead><tr>${head.map(h=>`<th style='text-align:left;padding:6px;border-bottom:1px solid var(--color-border);'>${h}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    ${errorHtml}
-  `;
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function validateRows() {
+  let okCount = 0;
+  state.parsedRows.forEach(row => {
+    const d = row.data;
+    row.errors = [];
+    
+    if (!d.pair) row.errors.push('通貨ペアなし');
+    if (!d.entry_price || isNaN(d.entry_price)) row.errors.push('Entry価格不正');
+    if (!d.exit_price || isNaN(d.exit_price)) row.errors.push('Exit価格不正');
+    if (!d.lot_size || isNaN(d.lot_size)) row.errors.push('ロット不正');
+    
+    row.isValid = row.errors.length === 0;
+    if (row.isValid) okCount++;
+  });
+  
+  const summary = document.getElementById('edit-summary');
+  if (summary) summary.textContent = `有効: ${okCount} / 全体: ${state.parsedRows.length}`;
+}
+
+function renderEditor() {
+  const table = document.getElementById('editor-table');
+  if (!table) return;
+  table.innerHTML = '';
+
+  // Header
+  const fields = [
+    { key: 'selected', label: '☑', width: '30px' },
+    { key: 'pair', label: '通貨ペア', width: '100px' },
+    { key: 'direction', label: '売買', width: '60px' },
+    { key: 'lot_size', label: 'Lot', width: '60px' },
+    { key: 'entry_price', label: 'Entry', width: '80px' },
+    { key: 'exit_price', label: 'Exit', width: '80px' },
+    { key: 'pnl', label: '損益', width: '80px' },
+    { key: 'created_at', label: '日付', width: '120px' },
+    { key: 'notes', label: 'メモ', width: '150px' }
+  ];
+
+  const thead = el('thead', {},
+    el('tr', {},
+      ...fields.map(f => el('th', { style: { width: f.width } }, 
+        f.key === 'selected' 
+          ? el('input', { type: 'checkbox', checked: true, onChange: toggleAllSelection })
+          : f.label
+      ))
+    )
+  );
+  table.appendChild(thead);
+
+  // Body
+  const tbody = el('tbody', {});
+  
+  state.parsedRows.forEach((row) => {
+    const tr = el('tr', { 
+      className: row.isValid ? '' : 'row-error',
+      dataset: { id: row.id } 
+    });
+
+    // Checkbox
+    tr.appendChild(el('td', {}, 
+      el('input', { 
+        type: 'checkbox', 
+        checked: row.selected, 
+        onChange: (e) => { row.selected = e.target.checked; }
+      })
+    ));
+
+    // Fields
+    fields.slice(1).forEach(f => {
+      const val = row.data[f.key] || '';
+      
+      let input;
+      if (f.key === 'direction') {
+        input = el('select', { 
+          value: val, 
+          className: 'editor-input',
+          onChange: (e) => updateCell(row, f.key, e.target.value)
+        }, 
+          el('option', { value: '買い' }, '買い'),
+          el('option', { value: '売り' }, '売り')
+        );
+        input.value = val; // 明示的にセット
+      } else {
+        input = el('input', { 
+          type: 'text', 
+          value: val, 
+          className: 'editor-input',
+          style: { width: '100%' },
+          onChange: (e) => updateCell(row, f.key, e.target.value)
+        });
+      }
+      
+      const td = el('td', {}, input);
+      if (!row.isValid && row.errors.some(e => e.includes(f.label) || e.includes(f.key))) {
+        td.style.background = '#fee';
+        td.title = row.errors.join('\n');
+      }
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+  
+  table.appendChild(tbody);
+}
+
+function toggleAllSelection(e) {
+  const checked = e.target.checked;
+  state.parsedRows.forEach(r => r.selected = checked);
+  renderEditor(); // 再描画（チェックボックスの状態更新のため）
+}
+
+function updateCell(row, key, value) {
+  row.data[key] = value;
+  validateRows();
+  // エラー状態が変わるかもしれないので行スタイル更新が必要だが、
+  // 簡易的に親のTRの色を変えるか、全体再描画。今回はパフォーマンス考慮しつつ簡易再描画
+  // renderEditor(); // 全体再描画は重いので、検証結果表示だけ更新
+  const tr = document.querySelector(`tr[data-id="${row.id}"]`);
+  if (tr) {
+    tr.className = row.isValid ? '' : 'row-error';
+  }
+}
+
+function handleBulkAction(action) {
+  const targets = state.parsedRows.filter(r => r.selected);
+  if (targets.length === 0) return;
+
+  if (action === 'delete') {
+    if (!confirm(`${targets.length} 件を削除しますか？`)) return;
+    state.parsedRows = state.parsedRows.filter(r => !r.selected);
+    renderEditor();
+  } else if (action === 'pair') {
+    const val = document.getElementById('bulk-pair').value;
+    if (!val) return;
+    targets.forEach(r => {
+      r.data.pair = val;
+    });
+    validateRows();
+    renderEditor();
+  }
+  validateRows();
 }
 
 function readFileAsText(file) {
@@ -194,5 +410,3 @@ function readFileAsArrayBuffer(file) {
     fr.readAsArrayBuffer(file);
   });
 }
-
-

@@ -3,6 +3,7 @@
  */
 
 import { saveChartInstance, destroyChart } from './index.js';
+import { el } from '../../utils/dom.js';
 
 let ChartCtor = null;
 
@@ -16,11 +17,12 @@ async function getChartModule() {
 
   // UMD版をスクリプトタグで動的読込（互換性が高い）
   await new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Chart.js の読み込みに失敗しました'));
+    const script = el('script', {
+      src: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+      async: true,
+      onload: () => resolve(),
+      onerror: () => reject(new Error('Chart.js の読み込みに失敗しました'))
+    });
     document.head.appendChild(script);
   });
   ChartCtor = window.Chart;
@@ -120,5 +122,3 @@ export async function renderCumulativePnlChart({
 
   saveChartInstance(chartId, chart);
 }
-
-

@@ -5,50 +5,33 @@ import { getTrades } from '../core/storage.js';
 import { calculateStats, calculateDrawdown, getStatsByPair } from '../core/analytics.js';
 import { showToast } from '../ui/toast.js';
 import { addProgress, refreshProgressUI } from '../core/progression.js';
+import { el } from '../utils/dom.js';
 
 /**
  * AI分析アシスタント初期化
  */
 export async function initAIAnalysis(container) {
   console.log('🤖 initAIAnalysis 開始');
-  console.log('コンテナ:', container);
   
   if (!container) {
     console.error('❌ AI分析: コンテナが見つかりません');
     return;
   }
   
-  console.log('コンテナのクラス:', container.className);
-  console.log('コンテナのスタイル:', window.getComputedStyle(container).display);
-  console.log('コンテナのHTML長:', container.innerHTML.length);
+  // HTMLは app.js の showMainApp/ensureAiPanel で el() を使って生成されるようになったため、
+  // ここではイベントリスナーの登録（委譲）を行うだけでよい。
+  // 以前のような innerHTML チェックは不要。
   
-  // HTMLは app.js の showMainApp() で生成されているので、イベントリスナーのみ設定
-  const buttons = container.querySelectorAll('[data-provider]');
-  
-  console.log(`🔍 ボタン検索結果: ${buttons.length}個見つかりました`);
-  
-  if (buttons.length === 0) {
-    console.warn('⚠️ AI分析: ボタンが見つかりません');
-    console.warn('コンテナの内容（最初の500文字）:', container.innerHTML.substring(0, 500));
-    console.warn('コンテナ内の全要素:', container.querySelectorAll('*').length);
-    return;
-  }
-  
-  console.log(`✅ AI分析: ${buttons.length}個のボタンにイベントリスナーを設定`);
-  
-  // イベント委譲を使用して、コンテナレベルでイベントを処理（重複防止）
-  // 既存のイベントリスナーを削除
   const existingHandler = container._aiAnalysisHandler;
   if (existingHandler) {
     console.log('既存のイベントハンドラーを削除');
     container.removeEventListener('click', existingHandler);
   }
   
-  // 新しいイベントハンドラーを作成（モバイル対応・改善版）
-  let isProcessing = false; // 重複実行防止
-  let lastTouchTime = 0; // 最後のタッチ時刻
+  // 新しいイベントハンドラーを作成
+  let isProcessing = false;
+  let lastTouchTime = 0;
   
-  // 統一されたハンドラー関数
   const handleButtonClick = (e, provider) => {
     if (isProcessing) {
       e.preventDefault();
@@ -70,10 +53,8 @@ export async function initAIAnalysis(container) {
       button.style.transform = 'scale(0.95)';
     }
     
-    // 非同期処理
     handleAIAnalysis(provider)
       .finally(() => {
-        // ボタンの視覚的フィードバックをリセット
         if (button) {
           setTimeout(() => {
             button.style.opacity = '';
@@ -88,12 +69,11 @@ export async function initAIAnalysis(container) {
       });
   };
   
-  // タッチイベント（モバイル優先）
+  // タッチイベント
   container.addEventListener('touchstart', (e) => {
     const button = e.target.closest('[data-provider]');
     if (button && !isProcessing) {
       const now = Date.now();
-      // 300ms以内の連続タッチを無視（ダブルタップ防止）
       if (now - lastTouchTime < 300) {
         return;
       }
@@ -104,9 +84,8 @@ export async function initAIAnalysis(container) {
     }
   }, { passive: false });
   
-  // クリックイベント（PC用）
+  // クリックイベント
   const clickHandler = (e) => {
-    // タッチイベントが処理された場合はスキップ
     if (Date.now() - lastTouchTime < 500) {
       return;
     }
@@ -119,8 +98,7 @@ export async function initAIAnalysis(container) {
   };
   
   container.addEventListener('click', clickHandler, { passive: false });
-  
-  container._aiAnalysisHandler = clickHandler; // 後で削除できるように保存
+  container._aiAnalysisHandler = clickHandler;
   
   console.log('✅ initAIAnalysis 完了');
 }
@@ -130,7 +108,6 @@ export async function initAIAnalysis(container) {
  */
 async function handleAIAnalysis(provider) {
   try {
-    // トレードデータ取得
     const trades = await getTrades(50);
     
     if (!trades || trades.length === 0) {
@@ -138,14 +115,12 @@ async function handleAIAnalysis(provider) {
       return;
     }
     
-    // オプション取得
     const includeNotes = document.getElementById('includeNotes')?.checked || false;
     const includePairAnalysis = document.getElementById('includePairAnalysis')?.checked || false;
     const includeTimeAnalysis = document.getElementById('includeTimeAnalysis')?.checked || false;
     const includeRiskAnalysis = document.getElementById('includeRiskAnalysis')?.checked || false;
     const includeGoals = document.getElementById('includeGoals')?.checked || false;
     
-    // プロンプト生成
     const prompt = generateAIPrompt(trades, {
       includeNotes,
       includePairAnalysis,
@@ -154,202 +129,134 @@ async function handleAIAnalysis(provider) {
       includeGoals
     });
     
-    // 既存のプロンプト表示があれば閉じる
     const existingPrompt = document.getElementById('ai-prompt-display');
     if (existingPrompt) {
       existingPrompt.remove();
     }
     
-    // プロンプトを画面に表示（モバイル用、コンパクトなサイズ）
-    const promptDisplay = document.createElement('div');
-    promptDisplay.id = 'ai-prompt-display';
-    promptDisplay.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 90%;
-      max-width: 600px;
-      max-height: 70vh;
-      background: rgba(0, 0, 0, 0.95);
-      z-index: 10000;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-      color: white;
-      display: flex;
-      flex-direction: column;
-    `;
+    // プロンプト表示モーダルの作成（el関数使用）
+    createPromptModal(prompt, provider);
     
-    // プロンプトテキストエリア（スクロール可能、コンパクト）
-    const promptText = document.createElement('textarea');
-    promptText.value = prompt;
-    promptText.readOnly = true;
-    promptText.style.cssText = `
-      flex: 1;
-      min-height: 200px;
-      max-height: 50vh;
-      background: #1a1a1a;
-      padding: 15px;
-      border-radius: 5px;
-      border: 1px solid #333;
-      color: #e0e0e0;
-      font-family: monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      resize: none;
-      overflow-y: auto;
-      margin-bottom: 15px;
-    `;
-    
-    // ボタンコンテナ
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = `
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    `;
-    
-    // コピーボタン
-    const copyButton = document.createElement('button');
-    copyButton.textContent = '📋 コピー';
-    copyButton.style.cssText = `
-      flex: 1;
-      min-width: 120px;
-      padding: 12px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    `;
-    copyButton.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        await copyToClipboard(prompt);
-        copyButton.textContent = '✓ コピー完了';
-        copyButton.style.background = '#28a745';
-        setTimeout(() => {
-          copyButton.textContent = '📋 コピー';
-          copyButton.style.background = '#007bff';
-        }, 2000);
-      } catch (err) {
-        console.error('コピーエラー:', err);
-        copyButton.textContent = '✗ コピー失敗';
-        copyButton.style.background = '#dc3545';
-        setTimeout(() => {
-          copyButton.textContent = '📋 コピー';
-          copyButton.style.background = '#007bff';
-        }, 2000);
-      }
-    });
-    
-    // AIチャットを開くボタン
-    const urls = {
-      chatgpt: 'https://chat.openai.com/',
-      claude: 'https://claude.ai/new',
-      gemini: 'https://gemini.google.com/'
-    };
-    
-    const openButton = document.createElement('button');
-    openButton.textContent = `🚀 ${provider.toUpperCase()}を開く`;
-    openButton.style.cssText = `
-      flex: 1;
-      min-width: 120px;
-      padding: 12px 20px;
-      background: #28a745;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    `;
-    openButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const url = urls[provider];
-      if (url) {
-        // ユーザーアクション内で確実に開く
-        const link = document.createElement('a');
-        link.href = url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    });
-    
-    // 閉じるボタン
-    const closeButton = document.createElement('button');
-    closeButton.textContent = '✕ 閉じる';
-    closeButton.style.cssText = `
-      flex: 1;
-      min-width: 120px;
-      padding: 12px 20px;
-      background: #6c757d;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    `;
-    closeButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      promptDisplay.remove();
-    });
-    
-    // 背景クリックで閉じる
-    promptDisplay.addEventListener('click', (e) => {
-      if (e.target === promptDisplay) {
-        promptDisplay.remove();
-      }
-    });
-    
-    buttonContainer.appendChild(copyButton);
-    buttonContainer.appendChild(openButton);
-    buttonContainer.appendChild(closeButton);
-    
-    promptDisplay.innerHTML = `
-      <h2 style="color: white; margin-bottom: 15px; font-size: 18px; text-align: center;">生成されたプロンプト</h2>
-    `;
-    promptDisplay.appendChild(promptText);
-    promptDisplay.appendChild(buttonContainer);
-    
-    document.body.appendChild(promptDisplay);
-    
-    // 進捗ポイントを加算
     addProgress('ai_analysis');
     refreshProgressUI();
     
-    // 自動でコピーを試みる
     try {
       await copyToClipboard(prompt);
       showToast('プロンプトをコピーしました！', 'success');
     } catch (copyError) {
       console.warn('自動コピーに失敗しましたが、手動でコピーできます:', copyError);
-      // エラーは無視（手動コピー可能）
     }
     
   } catch (error) {
     console.error('Error in AI analysis:', error);
     showToast('エラーが発生しました', 'error');
   }
+}
+
+/**
+ * プロンプト表示モーダル作成
+ */
+function createPromptModal(prompt, provider) {
+  const urls = {
+    chatgpt: 'https://chat.openai.com/',
+    claude: 'https://claude.ai/new',
+    gemini: 'https://gemini.google.com/'
+  };
+
+  const handleCopy = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    try {
+      await copyToClipboard(prompt);
+      btn.textContent = '✓ コピー完了';
+      btn.style.background = '#28a745';
+      setTimeout(() => {
+        btn.textContent = '📋 コピー';
+        btn.style.background = '#007bff';
+      }, 2000);
+    } catch (err) {
+      btn.textContent = '✗ コピー失敗';
+      btn.style.background = '#dc3545';
+      setTimeout(() => {
+        btn.textContent = '📋 コピー';
+        btn.style.background = '#007bff';
+      }, 2000);
+    }
+  };
+
+  const handleOpenAi = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = urls[provider];
+    if (url) {
+      const link = el('a', { href: url, target: '_blank', rel: 'noopener noreferrer', style: { display: 'none' } });
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleClose = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    document.getElementById('ai-prompt-display')?.remove();
+  };
+
+  const promptDisplay = el('div', {
+    id: 'ai-prompt-display',
+    onClick: (e) => { if (e.target.id === 'ai-prompt-display') handleClose(); },
+    style: {
+      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+      width: '90%', maxWidth: '600px', maxHeight: '70vh',
+      background: 'rgba(0, 0, 0, 0.95)', zIndex: '10000', padding: '20px',
+      borderRadius: '10px', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+      color: 'white', display: 'flex', flexDirection: 'column'
+    }
+  },
+    el('h2', { style: { color: 'white', marginBottom: '15px', fontSize: '18px', textAlign: 'center' } }, '生成されたプロンプト'),
+    el('textarea', {
+      readOnly: true,
+      value: prompt,
+      style: {
+        flex: '1', minHeight: '200px', maxHeight: '50vh', background: '#1a1a1a',
+        padding: '15px', borderRadius: '5px', border: '1px solid #333',
+        color: '#e0e0e0', fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.5',
+        whiteSpace: 'pre-wrap', wordWrap: 'break-word', resize: 'none', overflowY: 'auto',
+        marginBottom: '15px'
+      }
+    }),
+    el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
+      el('button', {
+        onClick: handleCopy,
+        style: {
+          flex: '1', minWidth: '120px', padding: '12px 20px', background: '#007bff',
+          color: 'white', border: 'none', borderRadius: '5px', fontSize: '14px', fontWeight: 'bold',
+          cursor: 'pointer', touchAction: 'manipulation', webkitTapHighlightColor: 'transparent'
+        }
+      }, '📋 コピー'),
+      el('button', {
+        onClick: handleOpenAi,
+        style: {
+          flex: '1', minWidth: '120px', padding: '12px 20px', background: '#28a745',
+          color: 'white', border: 'none', borderRadius: '5px', fontSize: '14px', fontWeight: 'bold',
+          cursor: 'pointer', touchAction: 'manipulation', webkitTapHighlightColor: 'transparent'
+        }
+      }, `🚀 ${provider.toUpperCase()}を開く`),
+      el('button', {
+        onClick: handleClose,
+        style: {
+          flex: '1', minWidth: '120px', padding: '12px 20px', background: '#6c757d',
+          color: 'white', border: 'none', borderRadius: '5px', fontSize: '14px', fontWeight: 'bold',
+          cursor: 'pointer', touchAction: 'manipulation', webkitTapHighlightColor: 'transparent'
+        }
+      }, '✕ 閉じる')
+    )
+  );
+
+  document.body.appendChild(promptDisplay);
 }
 
 /**
@@ -525,22 +432,16 @@ async function copyToClipboard(text) {
     }
     
     // フォールバック: execCommand（モバイル対応）
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    // モバイルでの表示位置を調整
-    textArea.style.position = 'fixed';
-    textArea.style.left = '0';
-    textArea.style.top = '0';
-    textArea.style.width = '2em';
-    textArea.style.height = '2em';
-    textArea.style.padding = '0';
-    textArea.style.border = 'none';
-    textArea.style.outline = 'none';
-    textArea.style.boxShadow = 'none';
-    textArea.style.background = 'transparent';
-    textArea.style.opacity = '0';
-    textArea.setAttribute('readonly', '');
-    textArea.setAttribute('aria-hidden', 'true');
+    const textArea = el('textarea', {
+      value: text,
+      readOnly: true,
+      'aria-hidden': 'true',
+      style: {
+        position: 'fixed', left: '0', top: '0', width: '2em', height: '2em',
+        padding: '0', border: 'none', outline: 'none', boxShadow: 'none',
+        background: 'transparent', opacity: '0'
+      }
+    });
     
     document.body.appendChild(textArea);
     
@@ -569,7 +470,6 @@ async function copyToClipboard(text) {
     }
   } catch (error) {
     console.error('Copy to clipboard failed:', error);
-    // モバイルではコピーに失敗してもエラーを表示せず、続行を許可
     throw error;
   }
 }
@@ -589,4 +489,3 @@ function openAIChat(provider) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 }
-

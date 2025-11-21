@@ -1,210 +1,577 @@
+/**
+ * ロット計算機能 - リファクタリング版
+ * 
+ * カテゴリー選択 → 銘柄選択 → リアルタイム計算のフロー実装
+ */
+
+import { el } from '../utils/dom.js';
+import { CATEGORIES, PAIRS, getPairById, getPairsByCategory, DEFAULT_PAIR_ID } from '../config/pairs-config.js';
+import { rateService } from '../services/rate-service.js';
 import { getDerivedSettings, getSettings, updateSettings, applyPreset, resetSettings, PRESET_LABELS, onSettingsChange } from '../core/settings.js';
 
+// ========================================
+// ステート管理
+// ========================================
+const state = {
+  // コンテナ参照
+  container: null,
+
+  // 選択状態
+  selectedCategory: null, // 'cross-yen' | 'gold' | 'stock' | 'crypto'
+  selectedPairId: null, // 現在選択中の銘柄ID
+
+  // 計算パラメータ
+  balance: 1000000, // 口座残高（円）
+  riskPercentage: 2.0, // リスク許容率（%）
+  stopLossPips: 20, // 損切り幅（pips）
+  accountType: 'overseas', // 'overseas' | 'domestic' | 'micro'
+
+  // レート情報
+  currentRate: null, // 現在のレート
+  isLoadingRate: false, // レート取得中フラグ
+
+  // 計算結果
+  calculatedLot: null,
+  riskAmount: null
+};
+
+// ========================================
+// メイン初期化
+// ========================================
+export function initLotCalculator(container) {
+  // コンテナが渡されなかった場合のフォールバック
+  const target = container || document.getElementById('lot-calculator-container');
+  if (!target) {
+    console.error('Lot calculator container not found');
+    return;
+  }
+
+  // グローバル変数にコンテナを保存（render関数から参照するため）
+  state.container = target;
+
+  // 初期レート取得
+  updateRate();
+
+  // UI描画
+  render();
+}
+
+// ========================================
+// レンダリング（UI全体構築）
+// ========================================
+function render() {
+  const container = state.container;
+  if (!container) {
+    console.error('Container not initialized');
+    return;
+  }
+
+  // コンテナをクリアして再構築
+  container.innerHTML = '';
+  container.appendChild(
+    el('div', { className: 'lot-calculator' },
+      // タイトル
+      el('h2', { className: 'calculator-title' }, 'ロット計算'),
+
+      // カテゴリー選択（大選択）
+      renderCategorySelector(),
+      
+      // 銘柄選択（小選択）- カテゴリー選択後に表示
+      state.selectedCategory ? renderPairSelector() : null,
+      
+      // 計算パラメータ入力
+      state.selectedPairId ? renderCalculatorInputs() : null,
+      
+      // 計算結果表示
+      state.calculatedLot !== null ? renderResults() : null
+    )
+  );
+}
+
+// ========================================
+// カテゴリー選択UI（小さなボタン）
+// ========================================
+function renderCategorySelector() {
+  return el('div', { className: 'category-selector' },
+    el('h3', { className: 'section-title' }, '取引商品を選択'),
+    
+    // 小さなボタンのグループ
+    el('div', { className: 'category-buttons' },
+      ...CATEGORIES.map(category => 
+        el('button', {
+          className: `category-btn ${state.selectedCategory === category.id ? 'active' : ''}`,
+          onClick: () => handleCategorySelect(category.id),
+          type: 'button',
+          dataset: { category: category.id }
+        }, category.displayName) // アイコンなし、テキストのみ
+      )
+    ),
+    
+    // 選択時に表示されるカード（縁取りが変化）
+    state.selectedCategory ? renderCategoryCard() : null
+  );
+}
+
+// 新しい関数：選択されたカテゴリーのカードを表示
+function renderCategoryCard() {
+  const category = CATEGORIES.find(c => c.id === state.selectedCategory);
+  if (!category) return null;
+
+  return el('div', {
+    className: 'category-card-container',
+    dataset: { category: category.id }
+  },
+    el('div', {
+      className: 'category-info-card',
+      style: { borderColor: category.color }
+    },
+      el('div', { className: 'card-content' },
+        el('h4', { className: 'card-title' }, category.displayName),
+        el('p', { className: 'card-description' }, category.description)
+      )
+    )
+  );
+}
+
+// ========================================
+// 銘柄選択UI（小選択プルダウン）
+// ========================================
+function renderPairSelector() {
+  const pairs = getPairsByCategory(state.selectedCategory);
+
+  return el('div', { className: 'pair-selector' },
+    el('h3', { className: 'section-title' }, '銘柄を選択'),
+    el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' } },
+      el('select', {
+        className: 'pair-select',
+        value: state.selectedPairId || '',
+        onChange: (e) => handlePairSelect(e.target.value)
+      },
+        ...pairs.map(pair =>
+          el('option', { value: pair.id }, `${pair.icon} ${pair.displayName}`)
+        )
+      ),
+
+      // 現在レート表示
+      renderCurrentRate()
+    )
+  );
+}
+
+function renderCurrentRate() {
+  if (!state.selectedPairId) return null;
+  const pair = getPairById(state.selectedPairId);
+  if (!pair) return null;
+
+  return el('div', { className: 'current-rate' },
+    el('span', { className: 'rate-label' }, '現在レート:'),
+    state.isLoadingRate
+      ? el('span', { className: 'rate-loading' }, '読込中...')
+      : state.currentRate
+        ? el('span', { className: 'rate-value' }, state.currentRate.toFixed(pair.decimal))
+        : el('div', { className: 'rate-error-container', style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+            el('span', { className: 'rate-error' }, '取得失敗'),
+            el('button', {
+              className: 'manual-rate-btn',
+              style: {
+                padding: '5px 10px',
+                fontSize: '12px',
+                background: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              },
+              onClick: () => promptManualRate()
+            }, '手動入力')
+          )
+  );
+}
+
+// 手動レート入力関数
+function promptManualRate() {
+  const pair = getPairById(state.selectedPairId);
+  const input = prompt(`${pair.displayName}の現在レートを入力してください:`);
+
+  if (input && !isNaN(parseFloat(input))) {
+    state.currentRate = parseFloat(input);
+    render();
+  }
+}
+
+// ========================================
+// 計算パラメータ入力UI
+// ========================================
+function renderCalculatorInputs() {
+  return el('div', { className: 'calculator-inputs' },
+    el('h3', { className: 'section-title' }, '計算条件'),
+
+    // 口座残高
+    el('div', { className: 'input-group' },
+      el('label', {}, '口座残高（円）'),
+      el('input', {
+        type: 'number',
+        value: state.balance,
+        onChange: (e) => handleInputChange('balance', parseFloat(e.target.value)) // changed from onInput to onChange to prevent scroll jump
+      })
+    ),
+
+    // リスク許容率
+    el('div', { className: 'input-group' },
+      el('label', {}, `許容リスク（${state.riskPercentage}%）`),
+      el('input', {
+        type: 'range',
+        min: '0.5',
+        max: '10',
+        step: '0.5',
+        value: state.riskPercentage,
+        onInput: (e) => handleInputChange('riskPercentage', parseFloat(e.target.value))
+      }),
+      el('div', { className: 'risk-presets' },
+        el('button', { onClick: () => handleInputChange('riskPercentage', 1), className: state.riskPercentage === 1 ? 'active' : '' }, '1%'),
+        el('button', { onClick: () => handleInputChange('riskPercentage', 2), className: state.riskPercentage === 2 ? 'active recommended' : 'recommended' }, '2%（推奨）'),
+        el('button', { onClick: () => handleInputChange('riskPercentage', 5), className: state.riskPercentage === 5 ? 'active' : '' }, '5%')
+      )
+    ),
+
+    // 損切り幅
+    el('div', { className: 'input-group' },
+      el('label', {}, '損切り幅（pips）'),
+      el('input', {
+        type: 'number',
+        value: state.stopLossPips,
+        onChange: (e) => handleInputChange('stopLossPips', parseFloat(e.target.value)) // changed from onInput to onChange to prevent scroll jump
+      })
+    ),
+
+    // 口座タイプ
+    el('div', { className: 'input-group' },
+      el('label', {}, '口座タイプ'),
+      el('select', {
+        className: 'account-type-select',
+        value: state.accountType,
+        onChange: (e) => {
+          handleInputChange('accountType', e.target.value);
+        }
+      },
+        el('option', { value: 'overseas' }, '海外FX（10万通貨）'),
+        el('option', { value: 'domestic' }, '国内FX（1万通貨）'),
+        el('option', { value: 'micro' }, 'マイクロ口座（1000通貨）')
+      )
+    ),
+
+    // 計算実行ボタン
+    el('button', {
+      className: 'calculate-btn',
+      onClick: handleCalculate
+    }, '計算する')
+  );
+}
+
+// ========================================
+// 計算結果表示UI
+// ========================================
+function renderResults() {
+  return el('div', { className: 'calculator-results' },
+    el('h3', { className: 'section-title' }, '計算結果'),
+
+    el('div', { className: 'result-card' },
+      el('div', { className: 'result-item primary' },
+        el('span', { className: 'result-label' }, '推奨ロット数'),
+        el('span', { className: 'result-value' }, `${state.calculatedLot} Lot`)
+      ),
+      
+      el('div', { className: 'result-item' },
+        el('span', { className: 'result-label' }, '許容リスク額'),
+        el('span', { className: 'result-value' }, `¥${state.riskAmount.toLocaleString()}`)
+      )
+    )
+  );
+}
+
+// ========================================
+// イベントハンドラ
+// ========================================
+function handleCategorySelect(categoryId) {
+  state.selectedCategory = categoryId;
+  
+  // カテゴリー内の最初の銘柄を自動選択
+  const pairs = getPairsByCategory(categoryId);
+  if (pairs.length > 0) {
+    state.selectedPairId = pairs[0].id;
+    updateRate();
+  } else {
+    state.selectedPairId = null;
+    render();
+  }
+}
+
+function handlePairSelect(pairId) {
+  state.selectedPairId = pairId;
+  updateRate();
+  render(); // updateRate内でもrenderされるが、ローディング表示のためここでも呼ぶ
+}
+
+function handleInputChange(key, value) {
+  state[key] = value;
+  render();
+}
+
+function handleCalculate() {
+  const pair = getPairById(state.selectedPairId);
+  if (!pair || !state.currentRate) {
+    alert('レート情報を取得できません。手動でレートを入力してください。');
+    return;
+  }
+
+  // 基本の契約サイズ
+  let contractSize = pair.contractSize;
+
+  // 口座タイプによる契約サイズ調整（FXのみ）
+  if (pair.type === 'forex') {
+    if (state.accountType === 'domestic') {
+      contractSize = 10000; // 国内1万通貨
+    } else if (state.accountType === 'micro') {
+      contractSize = 1000; // マイクロ1000通貨
+    } else {
+      contractSize = 100000; // 海外10万通貨
+    }
+  }
+
+  // リスク許容額（円）
+  const riskAmount = state.balance * (state.riskPercentage / 100);
+
+  // 1pipの価値計算
+  let pipValue;
+
+  if (pair.type === 'forex') {
+    if (pair.isJpyPair) {
+      // クロス円: 0.01円 = 1pip
+      pipValue = (contractSize / 100);
+    } else {
+      // クロスドル等: 0.0001ドル = 1pip
+      const assumedUsdJpy = 150;
+      pipValue = (contractSize / 10000) * assumedUsdJpy;
+    }
+  } else if (pair.type === 'commodity') {
+    // GOLD等: pipValueをそのまま使用（口座タイプによる調整は不要）
+    pipValue = pair.pipValue;
+  } else if (pair.type === 'crypto') {
+    // 仮想通貨: pipValueを使用（1ドル変動の円価値）
+    pipValue = pair.pipValue;
+
+    // 損切り幅は「ドル単位」と解釈
+    // 例: 20pips = 20ドル変動
+  } else if (pair.type === 'stock') {
+    // 株式CFD: pipValueをそのまま使用
+    pipValue = pair.pipValue;
+  }
+
+  // ロット数計算: リスク額 ÷ (SL幅 × 1pip価値)
+  let lots = riskAmount / (state.stopLossPips * pipValue);
+
+  // 小数点処理（商品タイプに応じて）
+  let finalLots;
+  if (pair.type === 'forex') {
+    finalLots = Math.floor(lots * 100) / 100; // 0.01ロット単位
+  } else if (pair.type === 'crypto') {
+    finalLots = Math.floor(lots * 10000) / 10000; // 0.0001単位
+  } else if (pair.type === 'commodity') {
+    finalLots = Math.max(Math.floor(lots * 100) / 100, pair.minLot);
+  } else if (pair.type === 'stock') {
+    finalLots = Math.floor(lots * 10) / 10; // 0.1単位
+  }
+
+  // 最小ロット制約
+  if (finalLots < pair.minLot) {
+    finalLots = pair.minLot;
+  }
+
+  // 結果を保存
+  state.calculatedLot = finalLots;
+  state.riskAmount = Math.floor(riskAmount);
+
+  console.log('計算結果:', {
+    pair: pair.displayName,
+    type: pair.type,
+    accountType: state.accountType,
+    contractSize,
+    pipValue,
+    currentRate: state.currentRate,
+    riskAmount,
+    stopLossPips: state.stopLossPips,
+    rawLots: lots,
+    calculatedLots: finalLots
+  });
+
+  render();
+}
+
+// ========================================
+// レート更新
+// ========================================
+async function updateRate() {
+  if (!state.selectedPairId) return;
+
+  state.isLoadingRate = true;
+  state.currentRate = null;
+  render();
+
+  const rate = await rateService.getRate(state.selectedPairId);
+
+  state.isLoadingRate = false;
+  state.currentRate = rate;
+  render();
+}
+
+// ========================================
+// 設定機能（復元版）
+// ========================================
 let accountSettingsUnsubscribe = null;
-let lotCalculatorUnsubscribe = null;
 
-const ACCOUNT_SETTINGS_SECTION = `
-  <section class="account-settings-card">
-    <h2>取引口座設定</h2>
-    <p class="description">
-      FX・ゴールドのロットサイズ / pip設定を口座タイプに合わせて管理します。<br>
-      ここで設定した値は記録フォームや分析でも自動的に使用されます。
-    </p>
+export function initAccountSettings(container) {
+  // 既存の購読解除
+  if (accountSettingsUnsubscribe) {
+    accountSettingsUnsubscribe();
+    accountSettingsUnsubscribe = null;
+  }
 
-    <div class="settings-grid">
-      <div class="form-group">
-        <label for="fx-preset">FX口座タイプ</label>
-        <select id="fx-preset">
-          <option value="fx-overseas">${PRESET_LABELS['fx-overseas']}</option>
-          <option value="fx-domestic">${PRESET_LABELS['fx-domestic']}</option>
-          <option value="fx-micro">${PRESET_LABELS['fx-micro']}</option>
-          <option value="custom">カスタム設定</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="gold-preset">ゴールド口座タイプ</label>
-        <select id="gold-preset">
-          <option value="gold-standard">${PRESET_LABELS['gold-standard']}</option>
-          <option value="gold-mini">${PRESET_LABELS['gold-mini']}</option>
-          <option value="gold-micro">${PRESET_LABELS['gold-micro']}</option>
-          <option value="custom">カスタム設定</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="usd-jpy-rate">USD/JPY 想定レート</label>
-        <input type="number" id="usd-jpy-rate" step="0.1" min="1" />
-        <small>米ドル建て資産の円換算に使用します</small>
-      </div>
-
-      <div class="form-group">
-        <label for="fx-lot-size">FX 1ロットあたり通貨量</label>
-        <input type="number" id="fx-lot-size" min="1" step="1" />
-        <small>例: 100,000通貨（海外FX） / 10,000通貨（国内FX）</small>
-      </div>
-
-      <div class="form-group">
-        <label for="fx-pip-size-jpy">JPYペアのpip刻み</label>
-        <input type="number" id="fx-pip-size-jpy" min="0.0001" step="0.0001" />
-        <small>通常は 0.01（1銭）</small>
-      </div>
-
-      <div class="form-group">
-        <label for="fx-pip-size-usd">USDペアのpip刻み</label>
-        <input type="number" id="fx-pip-size-usd" min="0.00001" step="0.00001" />
-        <small>通常は 0.0001</small>
-      </div>
-
-      <div class="form-group">
-        <label for="gold-lot-size">ゴールド 1ロットあたり重量（oz）</label>
-        <input type="number" id="gold-lot-size" min="0.01" step="0.01" />
-        <small>例: スタンダード100oz / ミニ10oz / マイクロ1oz</small>
-      </div>
-
-      <div class="form-group">
-        <label for="gold-pip-size">ゴールドのpip刻み（ドル）</label>
-        <input type="number" id="gold-pip-size" min="0.0001" step="0.0001" />
-        <small>例: 0.1（10セント）</small>
-      </div>
-    </div>
-
-    <div class="settings-summary" id="pip-summary"></div>
-
-    <div class="settings-actions">
-      <button type="button" id="reset-account-settings" class="btn-secondary">デフォルトに戻す</button>
-    </div>
-  </section>
-`;
-
-const LOT_CALCULATOR_SECTION = `
-  <section class="lot-calculator-container">
-    <h2>ロット計算ツール</h2>
-    <p class="description">2%ルールに基づいて適切なロットサイズを計算します</p>
-
-    <div class="calculator-card">
-      <div class="form-group">
-        <label>口座残高（円）</label>
-        <input type="number" id="account-balance" value="1000000" />
-      </div>
-
-      <div class="form-group">
-        <label>リスク許容率（%）</label>
-        <input type="number" id="risk-percentage" value="2" step="0.1" />
-      </div>
-
-      <div class="form-group">
-        <label>損切り幅（pips）</label>
-        <input type="number" id="stop-loss-pips" value="50" />
-      </div>
-
-      <div class="form-group">
-        <label style="font-size: 16px; font-weight: 600; margin-bottom: 12px; display: block;">
-          口座タイプを参考にする
-        </label>
-        
-        <div class="account-type-selector" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
-          <label class="account-type-option" data-preset="fx-overseas" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-            <input type="radio" name="account-type" value="fx-overseas" style="margin-right: 12px; width: 20px; height: 20px;" />
-            <div>
-              <div style="font-weight: 600; font-size: 14px;">海外FX（XM・Exness・FXGTなど）</div>
-              <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 100,000通貨 → 1pipsあたり 約1,000円</div>
-            </div>
-          </label>
-          
-          <label class="account-type-option" data-preset="fx-domestic" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-            <input type="radio" name="account-type" value="fx-domestic" style="margin-right: 12px; width: 20px; height: 20px;" />
-            <div>
-              <div style="font-weight: 600; font-size: 14px;">国内FX（SBI・GMO・楽天など）</div>
-              <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 10,000通貨 → 1pipsあたり 約100円</div>
-            </div>
-          </label>
-          
-          <label class="account-type-option" data-preset="fx-micro" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s;">
-            <input type="radio" name="account-type" value="fx-micro" style="margin-right: 12px; width: 20px; height: 20px;" />
-            <div>
-              <div style="font-weight: 600; font-size: 14px;">マイクロ口座</div>
-              <div style="font-size: 12px; color: var(--color-text-secondary);">1ロット = 1,000通貨 → 1pipsあたり 約10円</div>
-            </div>
-          </label>
-          
-          <label class="account-type-option" data-preset="custom" style="display: flex; align-items: center; padding: 12px; border: 2px solid var(--color-border); border-radius: var(--radius-md); cursor:pointer; transition: all 0.2s;">
-            <input type="radio" name="account-type" value="custom" style="margin-right: 12px; width: 20px; height: 20px;" />
-            <div>
-              <div style="font-weight: 600; font-size: 14px;">その他・手動設定</div>
-              <div style="font-size: 12px; color: var(--color-text-secondary);">自分で入力したい場合</div>
-            </div>
-          </label>
-        </div>
-        
-        <div id="current-setting" style="display: none; padding: 12px; background: var(--color-bg-1); border-radius: var(--radius-md); margin-bottom: 16px;">
-          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">✅ 自動設定値</div>
-          <div style="font-size: 12px; line-height: 1.6;">
-            <div>• 1ロット = <span id="lot-size-display">-</span></div>
-            <div>• 1pipsあたりの価値 = <span id="pip-value-display">-</span></div>
-          </div>
-        </div>
-        
-        <div id="manual-input" style="display: none;">
-          <label style="font-size: 13px; font-weight: 500; margin-bottom: 8px; display: block;">
-            1pipsあたりの価値（円）
-          </label>
-          <input type="number" id="pip-value" value="1000" step="1" min="1" />
-        </div>
-      </div>
-
-      <button id="calculate-btn" class="btn-primary">計算する</button>
-
-      <div id="calculation-result" class="calculation-result" style="display: none;">
-        <h3>計算結果</h3>
-        <div class="result-grid">
-          <div class="result-item">
-            <div class="result-label">許容リスク額</div>
-            <div class="result-value" id="risk-amount">-</div>
-          </div>
-          <div class="result-item">
-            <div class="result-label">推奨ロットサイズ</div>
-            <div class="result-value highlight" id="recommended-lot">-</div>
-          </div>
-          <div class="result-item">
-            <div class="result-label">損切り時の損失</div>
-            <div class="result-value" id="loss-amount">-</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-`;
-
-function renderPage({ includeAccountSettings, includeCalculator }) {
-  const sections = [];
-  if (includeAccountSettings) sections.push(ACCOUNT_SETTINGS_SECTION);
-  if (includeCalculator) sections.push(LOT_CALCULATOR_SECTION);
-  return `<div class="settings-page">${sections.join('')}</div>`;
+  container.innerHTML = '';
+  container.appendChild(createAccountSettingsSection());
+  
+  bindAccountSettings(container);
 }
 
-function query(root, selector) {
-  return root.querySelector(selector);
+/**
+ * 取引口座設定セクションを構築
+ */
+function createAccountSettingsSection() {
+  return el('div', { className: 'account-settings-page lot-calculator' }, // スタイルスコープ共有のためlot-calculator付与
+    el('h2', { className: 'calculator-title' }, '取引口座設定'),
+    el('p', { style: { marginBottom: '20px', color: '#666' } },
+      'FX・ゴールドのロットサイズ / pip設定を口座タイプに合わせて管理します。', el('br'),
+      'ここで設定した値は記録フォームや分析でも自動的に使用されます。'
+    ),
+    el('div', { className: 'calculator-inputs' },
+      el('div', { className: 'settings-grid' },
+        // FX口座タイプ
+        createSelectGroup('fx-preset', 'FX口座タイプ', [
+          { value: 'fx-overseas', label: PRESET_LABELS['fx-overseas'] },
+          { value: 'fx-domestic', label: PRESET_LABELS['fx-domestic'] },
+          { value: 'fx-micro', label: PRESET_LABELS['fx-micro'] },
+          { value: 'custom', label: 'カスタム設定' }
+        ]),
+        // ゴールド口座タイプ
+        createSelectGroup('gold-preset', 'ゴールド口座タイプ', [
+          { value: 'gold-standard', label: PRESET_LABELS['gold-standard'] },
+          { value: 'gold-mini', label: PRESET_LABELS['gold-mini'] },
+          { value: 'gold-micro', label: PRESET_LABELS['gold-micro'] },
+          { value: 'custom', label: 'カスタム設定' }
+        ]),
+        // USD/JPY レート
+        createInputGroup('usd-jpy-rate', 'USD/JPY 想定レート', 'number', { step: '0.1', min: '1' }, '米ドル建て資産の円換算に使用します'),
+        // FXロットサイズ
+        createInputGroup('fx-lot-size', 'FX 1ロットあたり通貨量', 'number', { min: '1', step: '1' }, '例: 100,000通貨（海外FX） / 10,000通貨（国内FX）'),
+        // FX pipサイズ (JPY)
+        createInputGroup('fx-pip-size-jpy', 'JPYペアのpip刻み', 'number', { min: '0.0001', step: '0.0001' }, '通常は 0.01（1銭）'),
+        // FX pipサイズ (USD)
+        createInputGroup('fx-pip-size-usd', 'USDペアのpip刻み', 'number', { min: '0.00001', step: '0.00001' }, '通常は 0.0001'),
+        // ゴールド ロットサイズ
+        createInputGroup('gold-lot-size', 'ゴールド 1ロットあたり重量（oz）', 'number', { min: '0.01', step: '0.01' }, '例: スタンダード100oz / ミニ10oz / マイクロ1oz'),
+        // ゴールド pipサイズ
+        createInputGroup('gold-pip-size', 'ゴールドのpip刻み（ドル）', 'number', { min: '0.0001', step: '0.0001' }, '例: 0.1（10セント）')
+      ),
+      el('div', { className: 'settings-summary', id: 'pip-summary', style: { marginTop: '20px', padding: '15px', background: '#f5f5f5', borderRadius: '8px' } }),
+      el('div', { className: 'settings-actions', style: { marginTop: '20px', textAlign: 'right' } },
+        el('button', { type: 'button', id: 'reset-account-settings', className: 'btn-secondary', style: { padding: '8px 16px' } }, 'デフォルトに戻す')
+      )
+    )
+  );
 }
 
-function queryAll(root, selector) {
-  return Array.from(root.querySelectorAll(selector));
+function createSelectGroup(id, label, options) {
+  return el('div', { className: 'input-group' },
+    el('label', { for: id }, label),
+    el('select', { id: id },
+      ...options.map(opt => el('option', { value: opt.value }, opt.label))
+    )
+  );
+}
+
+function createInputGroup(id, label, type, attrs = {}, smallText = '') {
+  return el('div', { className: 'input-group' },
+    el('label', { for: id }, label),
+    el('input', { type, id, ...attrs }),
+    smallText ? el('small', { style: { display: 'block', marginTop: '4px', fontSize: '12px', color: '#888' } }, smallText) : null
+  );
+}
+
+function bindAccountSettings(root) {
+  const numberInputsMap = {
+    '#usd-jpy-rate': 'usdJpyRate',
+    '#fx-lot-size': 'fxLotSize',
+    '#fx-pip-size-jpy': 'fxPipSizeJpy',
+    '#fx-pip-size-usd': 'fxPipSizeUsd',
+    '#gold-lot-size': 'goldLotSize',
+    '#gold-pip-size': 'goldPipSize',
+  };
+
+  const query = (selector) => root.querySelector(selector);
+
+  query('#fx-preset')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    if (value === 'custom') {
+      updateSettings({ presetFx: 'custom' });
+    } else {
+      applyPreset(value);
+    }
+    refreshAccountSettingsView(root);
+  });
+
+  query('#gold-preset')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    if (value === 'custom') {
+      updateSettings({ presetGold: 'custom' });
+    } else {
+      applyPreset(value);
+    }
+    refreshAccountSettingsView(root);
+  });
+
+  Object.entries(numberInputsMap).forEach(([selector, key]) => {
+    const input = query(selector);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const value = parseFloat(input.value);
+      updateSettings({ [key]: value });
+      refreshAccountSettingsView(root);
+    });
+  });
+
+  query('#reset-account-settings')?.addEventListener('click', () => {
+    if (confirm('設定をデフォルトに戻しますか？')) {
+      resetSettings();
+      refreshAccountSettingsView(root);
+    }
+  });
+
+  refreshAccountSettingsView(root);
+  accountSettingsUnsubscribe = onSettingsChange(() => refreshAccountSettingsView(root));
 }
 
 function refreshAccountSettingsView(root) {
   const { settings, fxJpy, fxUsd, gold } = getDerivedSettings();
-  const fxPreset = query(root, '#fx-preset');
-  const goldPreset = query(root, '#gold-preset');
-  const usdJpyRate = query(root, '#usd-jpy-rate');
-  const fxLotSize = query(root, '#fx-lot-size');
-  const fxPipSizeJpy = query(root, '#fx-pip-size-jpy');
-  const fxPipSizeUsd = query(root, '#fx-pip-size-usd');
-  const goldLotSize = query(root, '#gold-lot-size');
-  const goldPipSize = query(root, '#gold-pip-size');
-  const pipSummary = query(root, '#pip-summary');
-  const pipValueInput = query(root, '#pip-value');
-  const lotSizeDisplay = query(root, '#lot-size-display');
-  const pipValueDisplay = query(root, '#pip-value-display');
+  const query = (selector) => root.querySelector(selector);
+
+  const fxPreset = query('#fx-preset');
+  const goldPreset = query('#gold-preset');
+  const usdJpyRate = query('#usd-jpy-rate');
+  const fxLotSize = query('#fx-lot-size');
+  const fxPipSizeJpy = query('#fx-pip-size-jpy');
+  const fxPipSizeUsd = query('#fx-pip-size-usd');
+  const goldLotSize = query('#gold-lot-size');
+  const goldPipSize = query('#gold-pip-size');
+  const pipSummary = query('#pip-summary');
 
   if (fxPreset) fxPreset.value = settings.presetFx || 'custom';
   if (goldPreset) goldPreset.value = settings.presetGold || 'custom';
@@ -216,194 +583,12 @@ function refreshAccountSettingsView(root) {
   if (goldPipSize) goldPipSize.value = settings.goldPipSize;
 
   if (pipSummary) {
-    pipSummary.innerHTML = `
-      <strong>現在の設定サマリー</strong>
-      <ul>
-        <li>FX（JPYペア）: 1pips ≒ ${Math.round(fxJpy.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxJpy.pipMultiplier.toFixed(0)}）</li>
-        <li>FX（USDペア）: 1pips ≒ ${Math.round(fxUsd.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxUsd.pipMultiplier.toFixed(0)}）</li>
-        <li>GOLD: 1pips ≒ ${Math.round(gold.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${gold.pipMultiplier.toFixed(0)}）</li>
-      </ul>
-    `;
+    pipSummary.innerHTML = '';
+    pipSummary.appendChild(el('strong', {}, '現在の設定サマリー'));
+    pipSummary.appendChild(el('ul', { style: { paddingLeft: '20px', marginTop: '10px' } },
+      el('li', {}, `FX（JPYペア）: 1pips ≒ ${Math.round(fxJpy.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxJpy.pipMultiplier.toFixed(0)}）`),
+      el('li', {}, `FX（USDペア）: 1pips ≒ ${Math.round(fxUsd.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${fxUsd.pipMultiplier.toFixed(0)}）`),
+      el('li', {}, `GOLD: 1pips ≒ ${Math.round(gold.pipValuePerLot).toLocaleString()}円 / ロット（計算倍率 ${gold.pipMultiplier.toFixed(0)}）`)
+    ));
   }
-
-  if (pipValueInput && pipValueInput.dataset.manual !== 'true') {
-    pipValueInput.value = Math.round(fxJpy.pipValuePerLot);
-  }
-
-  if (lotSizeDisplay) lotSizeDisplay.textContent = Math.round(settings.fxLotSize).toLocaleString() + '通貨';
-  if (pipValueDisplay) pipValueDisplay.textContent = Math.round(fxJpy.pipValuePerLot).toLocaleString() + '円';
-}
-
-function highlightSelectedAccountType(root, preset) {
-  queryAll(root, '.account-type-option').forEach(option => {
-    option.style.borderColor = 'var(--color-border)';
-    option.style.background = 'transparent';
-    const input = option.querySelector('input[type="radio"]');
-    if (input) input.checked = false;
-  });
-
-  if (!preset) return;
-  queryAll(root, `.account-type-option[data-preset="${preset}"]`).forEach(option => {
-    option.style.borderColor = 'var(--color-primary)';
-    option.style.background = 'rgba(var(--color-teal-500-rgb), 0.05)';
-    const input = option.querySelector('input[type="radio"]');
-    if (input) input.checked = true;
-  });
-}
-
-function bindAccountSettings(root) {
-  if (accountSettingsUnsubscribe) {
-    accountSettingsUnsubscribe();
-    accountSettingsUnsubscribe = null;
-  }
-
-  const numberInputsMap = {
-    '#usd-jpy-rate': 'usdJpyRate',
-    '#fx-lot-size': 'fxLotSize',
-    '#fx-pip-size-jpy': 'fxPipSizeJpy',
-    '#fx-pip-size-usd': 'fxPipSizeUsd',
-    '#gold-lot-size': 'goldLotSize',
-    '#gold-pip-size': 'goldPipSize',
-  };
-
-  query(root, '#fx-preset')?.addEventListener('change', (e) => {
-    const value = e.target.value;
-    if (value === 'custom') {
-      updateSettings({ presetFx: 'custom' });
-    } else {
-      applyPreset(value);
-    }
-    refreshAccountSettingsView(root);
-  });
-
-  query(root, '#gold-preset')?.addEventListener('change', (e) => {
-    const value = e.target.value;
-    if (value === 'custom') {
-      updateSettings({ presetGold: 'custom' });
-    } else {
-      applyPreset(value);
-    }
-    refreshAccountSettingsView(root);
-  });
-
-  Object.entries(numberInputsMap).forEach(([selector, key]) => {
-    const input = query(root, selector);
-    if (!input) return;
-    input.addEventListener('change', () => {
-      const value = parseFloat(input.value);
-      updateSettings({ [key]: value });
-      refreshAccountSettingsView(root);
-    });
-  });
-
-  query(root, '#reset-account-settings')?.addEventListener('click', () => {
-    if (confirm('設定をデフォルトに戻しますか？')) {
-      resetSettings();
-      refreshAccountSettingsView(root);
-    }
-  });
-
-  refreshAccountSettingsView(root);
-  accountSettingsUnsubscribe = onSettingsChange(() => refreshAccountSettingsView(root));
-}
-
-function bindLotCalculator(root) {
-  if (lotCalculatorUnsubscribe) {
-    lotCalculatorUnsubscribe();
-    lotCalculatorUnsubscribe = null;
-  }
-
-  const pipValueInput = query(root, '#pip-value');
-  const currentSetting = query(root, '#current-setting');
-  const manualInput = query(root, '#manual-input');
-
-  if (pipValueInput) {
-    pipValueInput.addEventListener('input', () => {
-      pipValueInput.dataset.manual = 'true';
-    });
-  }
-
-  queryAll(root, 'input[name="account-type"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      const value = e.target.value;
-      highlightSelectedAccountType(root, value);
-
-      if (!currentSetting || !manualInput || !pipValueInput) return;
-
-      if (value === 'custom') {
-        currentSetting.style.display = 'none';
-        manualInput.style.display = 'block';
-        pipValueInput.dataset.manual = 'true';
-      } else {
-        applyPreset(value);
-        pipValueInput.dataset.manual = 'false';
-        refreshAccountSettingsView(root);
-        currentSetting.style.display = 'block';
-        manualInput.style.display = 'none';
-      }
-    });
-  });
-
-  query(root, '#calculate-btn')?.addEventListener('click', () => calculateLot(root));
-
-  refreshAccountSettingsView(root);
-  highlightSelectedAccountType(root, getSettings().presetFx);
-  lotCalculatorUnsubscribe = onSettingsChange(() => {
-    refreshAccountSettingsView(root);
-    highlightSelectedAccountType(root, getSettings().presetFx);
-  });
-}
-
-function calculateLot(root) {
-  const balance = parseFloat(query(root, '#account-balance')?.value || '');
-  const riskPct = parseFloat(query(root, '#risk-percentage')?.value || '');
-  const stopLossPips = parseFloat(query(root, '#stop-loss-pips')?.value || '');
-  const pipValue = parseFloat(query(root, '#pip-value')?.value || '');
-
-  if (!balance || !riskPct || !stopLossPips || !pipValue) {
-    alert('すべての項目を入力してください');
-    return;
-  }
-
-  const riskAmount = balance * (riskPct / 100);
-  const recommendedLot = riskAmount / (stopLossPips * pipValue);
-  const lossAmount = recommendedLot * stopLossPips * pipValue;
-
-  const riskAmountEl = query(root, '#risk-amount');
-  const recommendedLotEl = query(root, '#recommended-lot');
-  const lossAmountEl = query(root, '#loss-amount');
-  const resultContainer = query(root, '#calculation-result');
-
-  if (riskAmountEl) riskAmountEl.textContent = `${Math.round(riskAmount).toLocaleString()}円`;
-  if (recommendedLotEl) recommendedLotEl.textContent = `${recommendedLot.toFixed(2)} ロット`;
-  if (lossAmountEl) lossAmountEl.textContent = `${Math.round(lossAmount).toLocaleString()}円`;
-  if (resultContainer) resultContainer.style.display = 'block';
-}
-
-function initLotModules(container, { includeAccountSettings, includeCalculator }) {
-  if (!includeAccountSettings && accountSettingsUnsubscribe) {
-    accountSettingsUnsubscribe();
-    accountSettingsUnsubscribe = null;
-  }
-  if (!includeCalculator && lotCalculatorUnsubscribe) {
-    lotCalculatorUnsubscribe();
-    lotCalculatorUnsubscribe = null;
-  }
-
-  container.innerHTML = renderPage({ includeAccountSettings, includeCalculator });
-  const root = container;
-  if (includeAccountSettings) bindAccountSettings(root);
-  if (includeCalculator) bindLotCalculator(root);
-}
-
-export function initAccountSettings(container) {
-  initLotModules(container, { includeAccountSettings: true, includeCalculator: false });
-}
-
-export function initLotCalculator(container) {
-  initLotModules(container, { includeAccountSettings: false, includeCalculator: true });
-}
-
-export function initLotCalculatorPage(container) {
-  initLotModules(container, { includeAccountSettings: true, includeCalculator: true });
 }
